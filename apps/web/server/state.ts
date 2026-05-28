@@ -1,24 +1,32 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { ServerWebSocket } from "bun";
-import { configPath, httpsEnabled, port } from "./config";
+import { assetManifestPath, configPath, httpsEnabled, layoutPath, port } from "./config";
 import { lanUrls } from "./network";
 import type { ClientData } from "./types";
 import {
+  defaultAssetManifest,
   defaultDeviceConfig,
   defaultDeviceStatus,
+  defaultScreenLayout,
+  normalizeAssetManifest,
   normalizeDeviceConfig,
   normalizeDeviceStatus,
+  normalizeScreenLayout,
+  type AssetManifest,
   type AppSnapshot,
   type DeviceCommand,
   type DeviceConfig,
   type DeviceStatus,
+  type ScreenLayout,
   type ServerMessage
 } from "../src/shared";
 
 const clients = new Set<ServerWebSocket<ClientData>>();
 let deviceConfig = loadDeviceConfig();
 let deviceStatus = defaultDeviceStatus();
+let screenLayout = loadScreenLayout();
+let assetManifest = loadAssetManifest();
 
 export function addClient(ws: ServerWebSocket<ClientData>) {
   clients.add(ws);
@@ -42,6 +50,8 @@ export function snapshot(): AppSnapshot {
     serverTime: Date.now(),
     config: deviceConfig,
     status: deviceStatus,
+    layout: screenLayout,
+    assets: assetManifest,
     lanUrls: lanUrls(port, httpsEnabled ? "https" : "http")
   };
 }
@@ -52,6 +62,14 @@ export function currentConfig() {
 
 export function currentStatus() {
   return deviceStatus;
+}
+
+export function currentLayout() {
+  return screenLayout;
+}
+
+export function currentAssetManifest() {
+  return assetManifest;
 }
 
 export function patchDeviceConfig(patch: Partial<DeviceConfig>) {
@@ -70,6 +88,57 @@ export function resetDeviceConfig() {
   return deviceConfig;
 }
 
+export function updateLayout(layout: Partial<ScreenLayout>) {
+  screenLayout = normalizeScreenLayout(
+    {
+      ...layout,
+      revision: Date.now(),
+      updatedAt: Date.now()
+    },
+    screenLayout
+  );
+  saveScreenLayout(screenLayout);
+  broadcastSnapshot();
+  broadcastToDevices({ type: "layout", layout: screenLayout });
+  return screenLayout;
+}
+
+export function previewLayout(layout: Partial<ScreenLayout>) {
+  const preview = normalizeScreenLayout(layout, screenLayout);
+  broadcastToDevices({ type: "layout.preview", layout: preview });
+  return preview;
+}
+
+export function replaceAssetManifest(manifest: Partial<AssetManifest>) {
+  assetManifest = normalizeAssetManifest(
+    {
+      ...manifest,
+      revision: Date.now()
+    },
+    assetManifest
+  );
+  saveAssetManifest(assetManifest);
+  broadcastSnapshot();
+  broadcastToDevices({ type: "assets", assets: assetManifest });
+  return assetManifest;
+}
+
+export function upsertAsset(asset: AssetManifest["assets"][number]) {
+  const assets = assetManifest.assets.filter((item) => item.id !== asset.id);
+  assets.push(asset);
+  return replaceAssetManifest({ assets });
+}
+
+export function deleteAsset(assetId: string) {
+  const before = assetManifest.assets.length;
+  const assets = assetManifest.assets.filter((item) => item.id !== assetId);
+  if (assets.length === before) {
+    return null;
+  }
+
+  return replaceAssetManifest({ assets });
+}
+
 export function updateDeviceStatus(patch: Partial<DeviceStatus>) {
   deviceStatus = normalizeDeviceStatus(patch, deviceStatus);
   broadcastSnapshot();
@@ -82,6 +151,21 @@ export function markDeviceConnected(patch: Partial<DeviceStatus> = {}) {
     connected: true,
     updatedAt: Date.now()
   });
+}
+
+export function deviceSyncPayload(statusPatch: Partial<DeviceStatus>) {
+  updateDeviceStatus({
+    ...statusPatch,
+    connected: true,
+    updatedAt: Date.now()
+  });
+
+  return {
+    serverTime: Date.now(),
+    config: deviceConfig,
+    layout: screenLayout,
+    assets: assetManifest
+  };
 }
 
 export function sendDeviceCommand(command: DeviceCommand) {
@@ -147,4 +231,40 @@ function loadDeviceConfig() {
 function saveDeviceConfig(config: DeviceConfig) {
   mkdirSync(dirname(configPath), { recursive: true });
   writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+}
+
+function loadScreenLayout() {
+  if (!existsSync(layoutPath)) {
+    return defaultScreenLayout();
+  }
+
+  try {
+    const raw = JSON.parse(readFileSync(layoutPath, "utf8")) as Partial<ScreenLayout>;
+    return normalizeScreenLayout(raw);
+  } catch {
+    return defaultScreenLayout();
+  }
+}
+
+function saveScreenLayout(layout: ScreenLayout) {
+  mkdirSync(dirname(layoutPath), { recursive: true });
+  writeFileSync(layoutPath, `${JSON.stringify(layout, null, 2)}\n`, "utf8");
+}
+
+function loadAssetManifest() {
+  if (!existsSync(assetManifestPath)) {
+    return defaultAssetManifest();
+  }
+
+  try {
+    const raw = JSON.parse(readFileSync(assetManifestPath, "utf8")) as Partial<AssetManifest>;
+    return normalizeAssetManifest(raw);
+  } catch {
+    return defaultAssetManifest();
+  }
+}
+
+function saveAssetManifest(manifest: AssetManifest) {
+  mkdirSync(dirname(assetManifestPath), { recursive: true });
+  writeFileSync(assetManifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 }

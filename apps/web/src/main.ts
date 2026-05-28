@@ -2,10 +2,15 @@ import "./styles.css";
 import { icon, refreshIcons } from "./icons";
 import {
   defaultDeviceConfig,
+  defaultScreenLayout,
   type AppSnapshot,
+  type AssetManifest,
   type DeviceCommand,
   type DeviceConfig,
   type DeviceSlot,
+  type LayoutComponent,
+  type LayoutComponentType,
+  type ScreenLayout,
   type ServerMessage
 } from "./shared";
 
@@ -39,18 +44,48 @@ const refs = {
   motorValue: byId<HTMLElement>("motor-value"),
   urlList: byId<HTMLElement>("url-list"),
   pulseMotor: byId<HTMLButtonElement>("pulse-motor"),
-  applyConfig: byId<HTMLButtonElement>("apply-config")
+  applyConfig: byId<HTMLButtonElement>("apply-config"),
+  assetForm: byId<HTMLFormElement>("asset-form"),
+  assetList: byId<HTMLElement>("asset-list"),
+  layoutCanvas: byId<HTMLElement>("layout-canvas"),
+  componentList: byId<HTMLElement>("component-list"),
+  layoutState: byId<HTMLElement>("layout-state"),
+  saveLayout: byId<HTMLButtonElement>("save-layout"),
+  previewLayout: byId<HTMLButtonElement>("preview-layout")
 };
 
 let currentSnapshot: AppSnapshot | null = null;
+let assetManifest: AssetManifest = { version: 1, revision: 0, assets: [] };
+let layoutDraft: ScreenLayout = defaultScreenLayout();
 let socket: WebSocket | null = null;
 let socketRetryTimer: number | undefined;
+let previewTimer: number | undefined;
 let draftDirty = false;
+let layoutDirty = false;
+let dragging:
+  | {
+      id: string;
+      pointerId: number;
+      offsetX: number;
+      offsetY: number;
+    }
+  | null = null;
 
+bindTabs();
 bindForm();
+bindAssets();
+bindLayout();
 void loadSnapshot();
 connectSocket();
 refreshIcons();
+
+function bindTabs() {
+  for (const tab of Array.from(document.querySelectorAll<HTMLButtonElement>(".mode-tab"))) {
+    tab.addEventListener("click", () => {
+      setMode(tab.dataset.mode ?? "config");
+    });
+  }
+}
 
 function bindForm() {
   refs.form.addEventListener("input", () => {
@@ -77,6 +112,53 @@ function bindForm() {
   });
 
   syncRangeLabels();
+}
+
+function bindAssets() {
+  refs.assetForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    void uploadAsset();
+  });
+}
+
+function bindLayout() {
+  for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>("[data-add-component]"))) {
+    button.addEventListener("click", () => {
+      addComponent(button.dataset.addComponent as LayoutComponentType);
+    });
+  }
+
+  refs.saveLayout.addEventListener("click", () => {
+    void saveLayout();
+  });
+
+  refs.previewLayout.addEventListener("click", () => {
+    void sendLayoutPreview();
+  });
+
+  window.addEventListener("pointermove", (event) => {
+    if (!dragging) {
+      return;
+    }
+
+    const component = layoutDraft.components.find((item) => item.id === dragging?.id);
+    if (!component) {
+      return;
+    }
+
+    const rect = refs.layoutCanvas.getBoundingClientRect();
+    component.x = clampToScreen(((event.clientX - rect.left - dragging.offsetX) / rect.width) * 240);
+    component.y = clampToScreen(((event.clientY - rect.top - dragging.offsetY) / rect.height) * 240);
+    layoutDirty = true;
+    renderLayout();
+    queueLayoutPreview();
+  });
+
+  window.addEventListener("pointerup", (event) => {
+    if (dragging?.pointerId === event.pointerId) {
+      dragging = null;
+    }
+  });
 }
 
 async function loadSnapshot() {
@@ -135,9 +217,74 @@ async function sendCommand(command: DeviceCommand) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(command)
     });
-    setSaveState(result.delivered > 0 ? "已发送" : "设备离线");
+    setSaveState(result.delivered > 0 ? "已发送" : "等待设备同步");
   } catch (error) {
     setSaveState(errorMessage(error));
+  }
+}
+
+async function uploadAsset() {
+  const formData = new FormData(refs.assetForm);
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    renderAssetError("请选择文件");
+    return;
+  }
+
+  renderAssetError("上传中");
+  try {
+    assetManifest = await request<AssetManifest>("/api/assets", {
+      method: "POST",
+      body: formData
+    });
+    refs.assetForm.reset();
+    renderAssets();
+    renderAssetError("已上传");
+  } catch (error) {
+    renderAssetError(errorMessage(error));
+  }
+}
+
+async function deleteAsset(id: string) {
+  renderAssetError("删除中");
+  try {
+    assetManifest = await request<AssetManifest>(`/api/assets/${encodeURIComponent(id)}`, {
+      method: "DELETE"
+    });
+    renderAssets();
+    renderAssetError("已删除");
+  } catch (error) {
+    renderAssetError(errorMessage(error));
+  }
+}
+
+async function saveLayout() {
+  refs.layoutState.textContent = "保存中";
+  try {
+    layoutDraft = await request<ScreenLayout>("/api/layout", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(layoutDraft)
+    });
+    layoutDirty = false;
+    renderLayout();
+    refs.layoutState.textContent = "已保存";
+  } catch (error) {
+    refs.layoutState.textContent = errorMessage(error);
+  }
+}
+
+async function sendLayoutPreview() {
+  refs.layoutState.textContent = "预览中";
+  try {
+    await request<ScreenLayout>("/api/layout/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(layoutDraft)
+    });
+    refs.layoutState.textContent = "已下发预览";
+  } catch (error) {
+    refs.layoutState.textContent = errorMessage(error);
   }
 }
 
@@ -158,6 +305,12 @@ function connectSocket() {
     const message = JSON.parse(String(event.data)) as ServerMessage;
     if (message.type === "snapshot") {
       applySnapshot(message);
+    } else if (message.type === "layout" && !layoutDirty) {
+      layoutDraft = structuredClone(message.layout);
+      renderLayout();
+    } else if (message.type === "assets") {
+      assetManifest = message.assets;
+      renderAssets();
     }
   });
 
@@ -170,6 +323,11 @@ function connectSocket() {
 
 function applySnapshot(snapshot: AppSnapshot) {
   currentSnapshot = snapshot;
+  assetManifest = snapshot.assets;
+
+  if (!layoutDirty) {
+    layoutDraft = structuredClone(snapshot.layout);
+  }
 
   if (!draftDirty && !refs.form.matches(":focus-within")) {
     fillConfigForm(snapshot.config);
@@ -177,14 +335,20 @@ function applySnapshot(snapshot: AppSnapshot) {
 
   renderStatus(snapshot);
   renderUrls(snapshot.lanUrls);
+  renderAssets();
+  renderLayout();
 }
 
 function fillConfigForm(config: DeviceConfig) {
   setInput("deviceName", config.deviceName);
+  setInput("deviceId", config.deviceId);
+  setInput("deviceToken", config.deviceToken);
   setInput("pairSlot", config.pairSlot);
   setInput("weatherCity", config.weatherCity);
   setInput("wifiSsid", config.wifiSsid);
+  setInput("wifiPassword", config.wifiPassword);
   setInput("backendUrl", config.backendUrl);
+  setInput("backendPollIntervalMs", String(config.backendPollIntervalMs));
   setInput("sleepStartMinutes", minutesToTimeInput(config.sleepStartMinutes));
   setInput("sleepEndMinutes", minutesToTimeInput(config.sleepEndMinutes));
   setInput("touchIdleThreshold", String(config.touchIdleThreshold));
@@ -205,10 +369,14 @@ function readConfigForm(): DeviceConfig {
   return {
     ...fallback,
     deviceName: getInput("deviceName").value,
+    deviceId: getInput("deviceId").value,
+    deviceToken: getInput("deviceToken").value,
     pairSlot: getInput("pairSlot").value as DeviceSlot,
     weatherCity: getInput("weatherCity").value,
     wifiSsid: getInput("wifiSsid").value,
+    wifiPassword: getInput("wifiPassword").value,
     backendUrl: getInput("backendUrl").value,
+    backendPollIntervalMs: getNumber("backendPollIntervalMs"),
     sleepStartMinutes: timeInputToMinutes(getInput("sleepStartMinutes").value),
     sleepEndMinutes: timeInputToMinutes(getInput("sleepEndMinutes").value),
     touchIdleThreshold: getNumber("touchIdleThreshold"),
@@ -253,6 +421,152 @@ function renderUrls(urls: string[]) {
   );
 }
 
+function renderAssets() {
+  if (assetManifest.assets.length === 0) {
+    refs.assetList.innerHTML = `<p class="empty-row">暂无动画资源</p>`;
+    return;
+  }
+
+  refs.assetList.replaceChildren(
+    ...assetManifest.assets.map((asset) => {
+      const row = document.createElement("article");
+      row.className = "asset-row";
+      row.innerHTML = `
+        <div>
+          <strong>${escapeHtml(asset.name)}</strong>
+          <span>${asset.kind} · ${asset.format} · ${asset.frames} 帧 · ${asset.fps} fps</span>
+        </div>
+        <div>
+          <em>${formatBytes(asset.size)}</em>
+          <button class="icon-button" type="button" title="删除">${icon("trash-2")}</button>
+        </div>
+      `;
+      row.querySelector("button")?.addEventListener("click", () => {
+        void deleteAsset(asset.id);
+      });
+      return row;
+    })
+  );
+  refreshIcons();
+}
+
+function renderAssetError(text: string) {
+  byId<HTMLElement>("asset-state").textContent = text;
+}
+
+function renderLayout() {
+  refs.layoutCanvas.replaceChildren(
+    ...layoutDraft.components.map((component) => renderLayoutComponent(component))
+  );
+  refs.componentList.replaceChildren(
+    ...layoutDraft.components.map((component) => renderComponentRow(component))
+  );
+  refs.layoutState.textContent = layoutDirty ? "未保存" : "就绪";
+  refreshIcons();
+}
+
+function renderLayoutComponent(component: LayoutComponent) {
+  const node = document.createElement("button");
+  node.type = "button";
+  node.className = `layout-component layout-component--${component.type}`;
+  node.dataset.componentId = component.id;
+  node.style.left = `${(component.x / 240) * 100}%`;
+  node.style.top = `${(component.y / 240) * 100}%`;
+  node.title = component.label;
+
+  if (component.type === "arc") {
+    const radius = component.radius ?? 96;
+    node.style.width = `${(radius * 2 / 240) * 100}%`;
+    node.style.height = `${(radius * 2 / 240) * 100}%`;
+    node.style.borderColor = component.color ?? "#46c7a5";
+    node.textContent = component.label;
+  } else if (component.type === "sprite") {
+    const asset = assetManifest.assets.find((item) => item.id === component.assetId);
+    node.style.width = `${((component.width ?? 64) / 240) * 100}%`;
+    node.style.height = `${((component.height ?? 64) / 240) * 100}%`;
+    node.textContent = asset ? asset.name.slice(0, 8) : component.label;
+  } else if (component.type === "text") {
+    node.textContent = component.text || component.label;
+  } else if (component.type === "statusDot") {
+    node.textContent = "";
+  } else {
+    node.innerHTML = `<span class="preview-cube"></span>`;
+  }
+
+  node.addEventListener("pointerdown", (event) => {
+    const rect = refs.layoutCanvas.getBoundingClientRect();
+    dragging = {
+      id: component.id,
+      pointerId: event.pointerId,
+      offsetX: event.clientX - rect.left - (component.x / 240) * rect.width,
+      offsetY: event.clientY - rect.top - (component.y / 240) * rect.height
+    };
+    node.setPointerCapture(event.pointerId);
+  });
+
+  return node;
+}
+
+function renderComponentRow(component: LayoutComponent) {
+  const row = document.createElement("article");
+  row.className = "component-row";
+  row.innerHTML = `
+    <strong>${escapeHtml(component.label)}</strong>
+    <span>${component.type}</span>
+    <label>X <input type="number" min="0" max="240" value="${component.x}" data-axis="x" /></label>
+    <label>Y <input type="number" min="0" max="240" value="${component.y}" data-axis="y" /></label>
+    <button class="icon-button" type="button" title="删除">${icon("trash-2")}</button>
+  `;
+
+  for (const input of Array.from(row.querySelectorAll<HTMLInputElement>("input"))) {
+    input.addEventListener("input", () => {
+      const axis = input.dataset.axis === "x" ? "x" : "y";
+      component[axis] = clampToScreen(Number(input.value));
+      layoutDirty = true;
+      renderLayout();
+      queueLayoutPreview();
+    });
+  }
+
+  row.querySelector("button")?.addEventListener("click", () => {
+    layoutDraft.components = layoutDraft.components.filter((item) => item.id !== component.id);
+    layoutDirty = true;
+    renderLayout();
+    queueLayoutPreview();
+  });
+
+  return row;
+}
+
+function addComponent(type: LayoutComponentType) {
+  const id = `${type}-${Date.now().toString(36)}`;
+  const component: LayoutComponent = {
+    id,
+    type,
+    label: type,
+    x: 120,
+    y: 120,
+    width: type === "sprite" ? 64 : undefined,
+    height: type === "sprite" ? 64 : undefined,
+    radius: type === "arc" ? 96 : undefined,
+    startAngle: type === "arc" ? 135 : undefined,
+    endAngle: type === "arc" ? 225 : undefined,
+    text: type === "text" ? "Peek" : undefined,
+    color: type === "arc" || type === "statusDot" ? "#46c7a5" : undefined
+  };
+  layoutDraft.components.push(component);
+  layoutDirty = true;
+  renderLayout();
+  queueLayoutPreview();
+}
+
+function queueLayoutPreview() {
+  window.clearTimeout(previewTimer);
+  previewTimer = window.setTimeout(() => {
+    void sendLayoutPreview();
+  }, 220);
+}
+
 function syncRangeLabels() {
   refs.brightnessValue.textContent = `${getNumber("screenBrightness")}%`;
   refs.motorValue.textContent = `${getNumber("motorStrength")}%`;
@@ -270,6 +584,15 @@ async function request<T>(url: string, init?: RequestInit) {
   }
 
   return body.data as T;
+}
+
+function setMode(mode: string) {
+  for (const tab of Array.from(document.querySelectorAll<HTMLButtonElement>(".mode-tab"))) {
+    tab.classList.toggle("is-active", tab.dataset.mode === mode);
+  }
+  for (const view of Array.from(document.querySelectorAll<HTMLElement>("[data-view]"))) {
+    view.hidden = view.dataset.view !== mode;
+  }
 }
 
 function setSaveState(text: string) {
@@ -338,6 +661,33 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "失败";
 }
 
+function clampToScreen(value: number) {
+  return Math.min(Math.max(Math.round(value), 0), 240);
+}
+
+function formatBytes(value: number) {
+  if (value < 1024) {
+    return `${value} B`;
+  }
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(1)} KB`;
+  }
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (char) => {
+    const map: Record<string, string> = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      "\"": "&quot;",
+      "'": "&#39;"
+    };
+    return map[char] ?? char;
+  });
+}
+
 function shell() {
   return `
     <main class="app-shell">
@@ -355,6 +705,12 @@ function shell() {
           </button>
         </div>
       </header>
+
+      <nav class="mode-tabs" aria-label="管理模式">
+        <button class="mode-tab is-active" type="button" data-mode="config">${icon("settings")}<span>配置</span></button>
+        <button class="mode-tab" type="button" data-mode="assets">${icon("image")}<span>动画</span></button>
+        <button class="mode-tab" type="button" data-mode="layout">${icon("layout-dashboard")}<span>布局</span></button>
+      </nav>
 
       <section class="status-strip" aria-label="设备状态">
         <article class="status-card status-card--wide">
@@ -380,159 +736,265 @@ function shell() {
         </article>
       </section>
 
-      <div class="workspace">
-        <form class="config-panel" id="config-form">
-          <section class="panel-section">
+      <section data-view="config">
+        <div class="workspace">
+          <form class="config-panel" id="config-form">
+            <section class="panel-section">
+              <div class="section-heading">
+                <h2>${icon("settings")} 基础</h2>
+                <span id="save-state">就绪</span>
+              </div>
+              <div class="form-grid">
+                <label class="field">
+                  <span>设备名</span>
+                  <input id="deviceName" type="text" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span>设备 ID</span>
+                  <input id="deviceId" type="text" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span>令牌</span>
+                  <input id="deviceToken" type="password" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span>槽位</span>
+                  <select id="pairSlot">
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>天气城市</span>
+                  <input id="weatherCity" type="text" autocomplete="address-level2" />
+                </label>
+                <label class="field">
+                  <span>Wi-Fi SSID</span>
+                  <input id="wifiSsid" type="text" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span>Wi-Fi 密码</span>
+                  <input id="wifiPassword" type="password" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span>同步间隔 ms</span>
+                  <input id="backendPollIntervalMs" type="number" min="1000" max="600000" step="1000" />
+                </label>
+                <label class="field field--wide">
+                  <span>后端地址</span>
+                  <input id="backendUrl" type="text" inputmode="url" autocomplete="off" />
+                </label>
+              </div>
+            </section>
+
+            <section class="panel-section">
+              <div class="section-heading">
+                <h2>${icon("clock-3")} 休眠</h2>
+              </div>
+              <div class="form-grid form-grid--compact">
+                <label class="field">
+                  <span>开始</span>
+                  <input id="sleepStartMinutes" type="time" />
+                </label>
+                <label class="field">
+                  <span>结束</span>
+                  <input id="sleepEndMinutes" type="time" />
+                </label>
+                <label class="field">
+                  <span>无操作超时 ms</span>
+                  <input id="sleepTimeoutMs" type="number" min="5000" max="900000" step="1000" />
+                </label>
+              </div>
+            </section>
+
+            <section class="panel-section">
+              <div class="section-heading">
+                <h2>${icon("sliders-horizontal")} 传感器</h2>
+              </div>
+              <div class="form-grid form-grid--compact">
+                <label class="field">
+                  <span>空闲阈值</span>
+                  <input id="touchIdleThreshold" type="number" min="0" max="4095" />
+                </label>
+                <label class="field">
+                  <span>按压阈值</span>
+                  <input id="touchPressThreshold" type="number" min="0" max="4095" />
+                </label>
+                <label class="field">
+                  <span>采样间隔 ms</span>
+                  <input id="touchSampleIntervalMs" type="number" min="10" max="1000" />
+                </label>
+                <label class="field">
+                  <span>长按 ms</span>
+                  <input id="longPressMs" type="number" min="300" max="10000" step="100" />
+                </label>
+              </div>
+            </section>
+
+            <section class="panel-section">
+              <div class="section-heading">
+                <h2>${icon("vibrate")} 输出</h2>
+              </div>
+              <div class="range-grid">
+                <label class="range-field">
+                  <span>屏幕亮度 <strong id="brightness-value">80%</strong></span>
+                  <input id="screenBrightness" type="range" min="1" max="100" />
+                </label>
+                <label class="range-field">
+                  <span>马达力度 <strong id="motor-value">45%</strong></span>
+                  <input id="motorStrength" type="range" min="0" max="100" />
+                </label>
+              </div>
+              <div class="toggle-row">
+                <label class="toggle-field">
+                  <input id="imuEnabled" type="checkbox" />
+                  <span>${icon("smartphone")} IMU</span>
+                </label>
+                <label class="toggle-field">
+                  <input id="motorEnabled" type="checkbox" />
+                  <span>${icon("vibrate")} 马达</span>
+                </label>
+              </div>
+            </section>
+
+            <div class="form-actions">
+              <button class="secondary-button" id="reset-config" type="button">
+                ${icon("rotate-ccw")}<span>重置</span>
+              </button>
+              <button class="primary-button" type="submit">
+                ${icon("save")}<span>保存</span>
+              </button>
+            </div>
+          </form>
+
+          <aside class="diagnostic-panel">
+            <section class="panel-section">
+              <div class="section-heading">
+                <h2>${icon("cpu")} 诊断</h2>
+                <span id="updated-at">--</span>
+              </div>
+              <dl class="diagnostic-list">
+                <div><dt>固件</dt><dd id="firmware-version">--</dd></div>
+                <div><dt>IP</dt><dd id="ip-address">--</dd></div>
+                <div><dt>Pitch</dt><dd id="imu-pitch">--</dd></div>
+                <div><dt>Roll</dt><dd id="imu-roll">--</dd></div>
+                <div><dt>Yaw</dt><dd id="imu-yaw">--</dd></div>
+                <div><dt>马达</dt><dd id="motor-state">待机</dd></div>
+                <div class="diagnostic-list__wide"><dt>事件</dt><dd id="last-event">--</dd></div>
+              </dl>
+            </section>
+
+            <section class="panel-section">
+              <div class="section-heading">
+                <h2>${icon("zap")} 命令</h2>
+              </div>
+              <div class="command-grid">
+                <button class="secondary-button" id="pulse-motor" type="button">
+                  ${icon("vibrate")}<span>马达</span>
+                </button>
+                <button class="secondary-button" id="apply-config" type="button">
+                  ${icon("check")}<span>应用</span>
+                </button>
+              </div>
+            </section>
+
+            <section class="panel-section">
+              <div class="section-heading">
+                <h2>${icon("map-pin")} 地址</h2>
+              </div>
+              <div class="url-list" id="url-list"></div>
+            </section>
+          </aside>
+        </div>
+      </section>
+
+      <section data-view="assets" hidden>
+        <div class="asset-workspace">
+          <form class="panel-section asset-uploader" id="asset-form">
             <div class="section-heading">
-              <h2>${icon("settings")} 基础</h2>
-              <span id="save-state">就绪</span>
+              <h2>${icon("upload")} 动画文件</h2>
+              <span id="asset-state">就绪</span>
             </div>
             <div class="form-grid">
-              <label class="field">
-                <span>设备名</span>
-                <input id="deviceName" type="text" autocomplete="off" />
+              <label class="field field--wide">
+                <span>文件</span>
+                <input name="file" type="file" />
               </label>
               <label class="field">
-                <span>槽位</span>
-                <select id="pairSlot">
-                  <option value="A">A</option>
-                  <option value="B">B</option>
+                <span>名称</span>
+                <input name="name" type="text" autocomplete="off" />
+              </label>
+              <label class="field">
+                <span>类型</span>
+                <select name="kind">
+                  <option value="sprite">sprite</option>
+                  <option value="image">image</option>
+                  <option value="package">package</option>
                 </select>
               </label>
               <label class="field">
-                <span>天气城市</span>
-                <input id="weatherCity" type="text" autocomplete="address-level2" />
+                <span>格式</span>
+                <input name="format" type="text" value="rgb565-rle" />
               </label>
               <label class="field">
-                <span>Wi-Fi SSID</span>
-                <input id="wifiSsid" type="text" autocomplete="off" />
+                <span>帧数</span>
+                <input name="frames" type="number" min="1" max="240" value="6" />
               </label>
-              <label class="field field--wide">
-                <span>后端地址</span>
-                <input id="backendUrl" type="text" inputmode="url" autocomplete="off" />
+              <label class="field">
+                <span>FPS</span>
+                <input name="fps" type="number" min="1" max="60" value="6" />
               </label>
+              <label class="field">
+                <span>宽</span>
+                <input name="width" type="number" min="0" max="4096" value="0" />
+              </label>
+              <label class="field">
+                <span>高</span>
+                <input name="height" type="number" min="0" max="4096" value="0" />
+              </label>
+            </div>
+            <div class="form-actions">
+              <button class="primary-button" type="submit">${icon("upload")}<span>上传</span></button>
+            </div>
+          </form>
+
+          <section class="panel-section">
+            <div class="section-heading">
+              <h2>${icon("hard-drive")} 资源清单</h2>
+            </div>
+            <div class="asset-list" id="asset-list"></div>
+          </section>
+        </div>
+      </section>
+
+      <section data-view="layout" hidden>
+        <div class="layout-workspace">
+          <section class="panel-section layout-preview-panel">
+            <div class="section-heading">
+              <h2>${icon("monitor")} 屏幕布局</h2>
+              <span id="layout-state">就绪</span>
+            </div>
+            <div class="layout-editor">
+              <div class="screen-preview" id="layout-canvas" aria-label="屏幕预览"></div>
+            </div>
+            <div class="layout-toolbar">
+              <button class="secondary-button" type="button" data-add-component="cube">${icon("box")}<span>立方体</span></button>
+              <button class="secondary-button" type="button" data-add-component="sprite">${icon("image")}<span>动画</span></button>
+              <button class="secondary-button" type="button" data-add-component="arc">${icon("activity")}<span>圆弧</span></button>
+              <button class="secondary-button" type="button" data-add-component="text">${icon("type")}<span>文本</span></button>
+              <button class="secondary-button" type="button" id="preview-layout">${icon("radio")}<span>预览</span></button>
+              <button class="primary-button" type="button" id="save-layout">${icon("save")}<span>保存</span></button>
             </div>
           </section>
 
           <section class="panel-section">
             <div class="section-heading">
-              <h2>${icon("clock-3")} 休眠</h2>
+              <h2>${icon("layers")} 组件</h2>
             </div>
-            <div class="form-grid form-grid--compact">
-              <label class="field">
-                <span>开始</span>
-                <input id="sleepStartMinutes" type="time" />
-              </label>
-              <label class="field">
-                <span>结束</span>
-                <input id="sleepEndMinutes" type="time" />
-              </label>
-              <label class="field">
-                <span>无操作超时 ms</span>
-                <input id="sleepTimeoutMs" type="number" min="5000" max="900000" step="1000" />
-              </label>
-            </div>
+            <div class="component-list" id="component-list"></div>
           </section>
-
-          <section class="panel-section">
-            <div class="section-heading">
-              <h2>${icon("sliders-horizontal")} 传感器</h2>
-            </div>
-            <div class="form-grid form-grid--compact">
-              <label class="field">
-                <span>空闲阈值</span>
-                <input id="touchIdleThreshold" type="number" min="0" max="4095" />
-              </label>
-              <label class="field">
-                <span>按压阈值</span>
-                <input id="touchPressThreshold" type="number" min="0" max="4095" />
-              </label>
-              <label class="field">
-                <span>采样间隔 ms</span>
-                <input id="touchSampleIntervalMs" type="number" min="10" max="1000" />
-              </label>
-              <label class="field">
-                <span>长按 ms</span>
-                <input id="longPressMs" type="number" min="300" max="10000" step="100" />
-              </label>
-            </div>
-          </section>
-
-          <section class="panel-section">
-            <div class="section-heading">
-              <h2>${icon("vibrate")} 输出</h2>
-            </div>
-            <div class="range-grid">
-              <label class="range-field">
-                <span>屏幕亮度 <strong id="brightness-value">80%</strong></span>
-                <input id="screenBrightness" type="range" min="1" max="100" />
-              </label>
-              <label class="range-field">
-                <span>马达力度 <strong id="motor-value">45%</strong></span>
-                <input id="motorStrength" type="range" min="0" max="100" />
-              </label>
-            </div>
-            <div class="toggle-row">
-              <label class="toggle-field">
-                <input id="imuEnabled" type="checkbox" />
-                <span>${icon("smartphone")} IMU</span>
-              </label>
-              <label class="toggle-field">
-                <input id="motorEnabled" type="checkbox" />
-                <span>${icon("vibrate")} 马达</span>
-              </label>
-            </div>
-          </section>
-
-          <div class="form-actions">
-            <button class="secondary-button" id="reset-config" type="button">
-              ${icon("rotate-ccw")}<span>重置</span>
-            </button>
-            <button class="primary-button" type="submit">
-              ${icon("save")}<span>保存</span>
-            </button>
-          </div>
-        </form>
-
-        <aside class="diagnostic-panel">
-          <section class="panel-section">
-            <div class="section-heading">
-              <h2>${icon("cpu")} 诊断</h2>
-              <span id="updated-at">--</span>
-            </div>
-            <dl class="diagnostic-list">
-              <div><dt>固件</dt><dd id="firmware-version">--</dd></div>
-              <div><dt>IP</dt><dd id="ip-address">--</dd></div>
-              <div><dt>Pitch</dt><dd id="imu-pitch">--</dd></div>
-              <div><dt>Roll</dt><dd id="imu-roll">--</dd></div>
-              <div><dt>Yaw</dt><dd id="imu-yaw">--</dd></div>
-              <div><dt>马达</dt><dd id="motor-state">待机</dd></div>
-              <div class="diagnostic-list__wide"><dt>事件</dt><dd id="last-event">--</dd></div>
-            </dl>
-          </section>
-
-          <section class="panel-section">
-            <div class="section-heading">
-              <h2>${icon("zap")} 命令</h2>
-            </div>
-            <div class="command-grid">
-              <button class="secondary-button" id="pulse-motor" type="button">
-                ${icon("vibrate")}<span>马达</span>
-              </button>
-              <button class="secondary-button" id="apply-config" type="button">
-                ${icon("check")}<span>应用</span>
-              </button>
-            </div>
-          </section>
-
-          <section class="panel-section">
-            <div class="section-heading">
-              <h2>${icon("map-pin")} 地址</h2>
-            </div>
-            <div class="url-list" id="url-list"></div>
-          </section>
-        </aside>
-      </div>
+        </div>
+      </section>
     </main>
   `;
 }

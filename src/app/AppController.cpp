@@ -85,6 +85,10 @@ AppController::AppController() : screen_(display_) {}
 void AppController::begin() {
   Serial.begin(115200);
 
+  fileSystem_.begin();
+  layoutStore_.begin(fileSystem_);
+  assetStore_.begin(fileSystem_);
+
   if (!display_.begin()) {
     Serial.println("GC9A01 init failed");
     while (true) {
@@ -94,6 +98,8 @@ void AppController::begin() {
 
   touch_.begin(config_);
   const bool imuReady = imu_.begin();
+  network_.begin(config_);
+  backend_.begin(config_, layoutStore_, assetStore_);
   loadScreenCalibration();
 
   BootScreenModel bootModel;
@@ -109,7 +115,9 @@ void AppController::begin() {
 
 void AppController::loop() {
   const uint32_t now = millis();
+  network_.loop(now);
   imu_.update(now);
+  backend_.loop(now, network_, imu_.pose(), imu_.isReady());
   detectCubeThrow(now);
   updateCubeThrow(now);
   updateCubeScale(now);
@@ -162,8 +170,8 @@ void AppController::renderHomeText(const char *text, const char *hintText) {
   model.peerWeather = "--";
   model.localBatteryPercent = 92;
   model.peerBatteryPercent = 79;
-  model.wifiConnected = false;
-  model.backendConnected = false;
+  model.wifiConnected = network_.isConnected();
+  model.backendConnected = backend_.isConnected(millis());
   model.poseAlert = false;
   applyCubeMotion(model, pose);
   screen_.renderHome(model);
@@ -179,8 +187,8 @@ void AppController::renderHomeFrame() {
   model.peerWeather = "--";
   model.localBatteryPercent = 92;
   model.peerBatteryPercent = 79;
-  model.wifiConnected = false;
-  model.backendConnected = false;
+  model.wifiConnected = network_.isConnected();
+  model.backendConnected = backend_.isConnected(millis());
   applyCubeMotion(model, pose);
   if (cubeThrown_) {
     screen_.renderHome(model);
@@ -194,10 +202,10 @@ void AppController::renderStatus() {
   const ImuPose &pose = imu_.pose();
   StatusScreenModel model;
   model.buttonPressed = touch_.isPressed();
-  model.wifiRssi = 0;
+  model.wifiRssi = static_cast<int8_t>(network_.rssi());
   model.localBatteryPercent = 92;
   model.peerBatteryPercent = 79;
-  model.backendConnected = false;
+  model.backendConnected = backend_.isConnected(millis());
   model.imuReady = imu_.isReady();
   model.imuAddress = imu_.address();
   model.imuAccelZ = imu_.lastSample().accelZ;

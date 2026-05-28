@@ -8,6 +8,7 @@ import {
   addClient,
   markDeviceConnected,
   patchDeviceConfig,
+  previewLayout,
   removeClient,
   sendSnapshot,
   updateDeviceStatus
@@ -48,6 +49,11 @@ export const websocketHandlers = {
 
     if (message.type === "config.patch") {
       patchDeviceConfig(message.patch);
+      return;
+    }
+
+    if (message.type === "layout.preview") {
+      previewLayout(message.layout);
       return;
     }
 

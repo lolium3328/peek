@@ -2,10 +2,14 @@ export type DeviceSlot = "A" | "B";
 
 export interface DeviceConfig {
   deviceName: string;
+  deviceId: string;
+  deviceToken: string;
   pairSlot: DeviceSlot;
   weatherCity: string;
   wifiSsid: string;
+  wifiPassword: string;
   backendUrl: string;
+  backendPollIntervalMs: number;
   sleepStartMinutes: number;
   sleepEndMinutes: number;
   touchIdleThreshold: number;
@@ -40,11 +44,69 @@ export interface DeviceStatus {
   updatedAt: number | null;
 }
 
+export type ScreenShape = "circle";
+export type LayoutComponentType = "cube" | "sprite" | "arc" | "text" | "statusDot";
+
+export interface LayoutComponent {
+  id: string;
+  type: LayoutComponentType;
+  label: string;
+  x: number;
+  y: number;
+  width?: number;
+  height?: number;
+  scale?: number;
+  radius?: number;
+  startAngle?: number;
+  endAngle?: number;
+  binding?: string;
+  assetId?: string;
+  text?: string;
+  color?: string;
+}
+
+export interface ScreenLayout {
+  version: number;
+  revision: number;
+  updatedAt: number;
+  screen: {
+    width: number;
+    height: number;
+    shape: ScreenShape;
+  };
+  components: LayoutComponent[];
+}
+
+export type PetAssetKind = "sprite" | "image" | "package";
+
+export interface PetAsset {
+  id: string;
+  name: string;
+  kind: PetAssetKind;
+  format: string;
+  width: number;
+  height: number;
+  frames: number;
+  fps: number;
+  size: number;
+  path: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AssetManifest {
+  version: number;
+  revision: number;
+  assets: PetAsset[];
+}
+
 export interface AppSnapshot {
   type: "snapshot";
   serverTime: number;
   config: DeviceConfig;
   status: DeviceStatus;
+  layout: ScreenLayout;
+  assets: AssetManifest;
   lanUrls: string[];
 }
 
@@ -58,6 +120,16 @@ export interface ConfigMessage {
   config: DeviceConfig;
 }
 
+export interface LayoutMessage {
+  type: "layout" | "layout.preview";
+  layout: ScreenLayout;
+}
+
+export interface AssetManifestMessage {
+  type: "assets";
+  assets: AssetManifest;
+}
+
 export interface DeviceCommand {
   kind: "motor.pulse" | "display.refresh" | "config.apply";
   value?: number;
@@ -69,7 +141,13 @@ export interface DeviceCommandMessage {
   command: DeviceCommand;
 }
 
-export type ServerMessage = AppSnapshot | NoticeMessage | ConfigMessage | DeviceCommandMessage;
+export type ServerMessage =
+  | AppSnapshot
+  | NoticeMessage
+  | ConfigMessage
+  | LayoutMessage
+  | AssetManifestMessage
+  | DeviceCommandMessage;
 
 export type ClientMessage =
   | {
@@ -78,6 +156,10 @@ export type ClientMessage =
   | {
       type: "config.patch";
       patch: Partial<DeviceConfig>;
+    }
+  | {
+      type: "layout.preview";
+      layout: Partial<ScreenLayout>;
     }
   | {
       type: "device.hello";
@@ -92,10 +174,14 @@ export const deviceSlots: DeviceSlot[] = ["A", "B"];
 
 export const defaultDeviceConfig = (): DeviceConfig => ({
   deviceName: "Peek",
+  deviceId: "peek-dev",
+  deviceToken: "",
   pairSlot: "A",
   weatherCity: "Shanghai",
   wifiSsid: "",
+  wifiPassword: "",
   backendUrl: "",
+  backendPollIntervalMs: 5000,
   sleepStartMinutes: 23 * 60,
   sleepEndMinutes: 7 * 60,
   touchIdleThreshold: 3980,
@@ -128,6 +214,57 @@ export const defaultDeviceStatus = (): DeviceStatus => ({
   updatedAt: null
 });
 
+export const defaultScreenLayout = (): ScreenLayout => ({
+  version: 1,
+  revision: 0,
+  updatedAt: 0,
+  screen: {
+    width: 240,
+    height: 240,
+    shape: "circle"
+  },
+  components: [
+    {
+      id: "pet",
+      type: "cube",
+      label: "Pet",
+      x: 120,
+      y: 116,
+      scale: 1
+    },
+    {
+      id: "batteryA",
+      type: "arc",
+      label: "A",
+      x: 120,
+      y: 120,
+      radius: 106,
+      startAngle: 136,
+      endAngle: 224,
+      binding: "battery.local",
+      color: "#46c7a5"
+    },
+    {
+      id: "batteryB",
+      type: "arc",
+      label: "B",
+      x: 120,
+      y: 120,
+      radius: 106,
+      startAngle: -44,
+      endAngle: 44,
+      binding: "battery.peer",
+      color: "#46c7a5"
+    }
+  ]
+});
+
+export const defaultAssetManifest = (): AssetManifest => ({
+  version: 1,
+  revision: 0,
+  assets: []
+});
+
 export const otherSlot = (slot: DeviceSlot): DeviceSlot => (slot === "A" ? "B" : "A");
 
 export const isDeviceSlot = (value: string): value is DeviceSlot =>
@@ -149,10 +286,14 @@ export function normalizeDeviceConfig(
 
   return {
     deviceName: textValue(patch.deviceName, base.deviceName, "Peek"),
+    deviceId: textValue(patch.deviceId, base.deviceId, "peek-dev"),
+    deviceToken: textValue(patch.deviceToken, base.deviceToken, ""),
     pairSlot: isDeviceSlot(pairSlot) ? pairSlot : base.pairSlot,
     weatherCity: textValue(patch.weatherCity, base.weatherCity, "Shanghai"),
     wifiSsid: textValue(patch.wifiSsid, base.wifiSsid, ""),
+    wifiPassword: textValue(patch.wifiPassword, base.wifiPassword, ""),
     backendUrl: textValue(patch.backendUrl, base.backendUrl, ""),
+    backendPollIntervalMs: intValue(patch.backendPollIntervalMs, base.backendPollIntervalMs, 1000, 600000),
     sleepStartMinutes: intValue(patch.sleepStartMinutes, base.sleepStartMinutes, 0, 1439),
     sleepEndMinutes: intValue(patch.sleepEndMinutes, base.sleepEndMinutes, 0, 1439),
     touchIdleThreshold: idleThreshold,
@@ -164,6 +305,39 @@ export function normalizeDeviceConfig(
     motorStrength: intValue(patch.motorStrength, base.motorStrength, 0, 100),
     imuEnabled: boolValue(patch.imuEnabled, base.imuEnabled),
     motorEnabled: boolValue(patch.motorEnabled, base.motorEnabled)
+  };
+}
+
+export function normalizeScreenLayout(
+  patch: Partial<ScreenLayout>,
+  base: ScreenLayout = defaultScreenLayout()
+): ScreenLayout {
+  const nextScreen = patch.screen ?? base.screen;
+  const now = Date.now();
+
+  return {
+    version: 1,
+    revision: intValue(patch.revision, base.revision, 0, Number.MAX_SAFE_INTEGER),
+    updatedAt: intValue(patch.updatedAt, now, 0, Number.MAX_SAFE_INTEGER),
+    screen: {
+      width: intValue(nextScreen.width, base.screen.width, 120, 720),
+      height: intValue(nextScreen.height, base.screen.height, 120, 720),
+      shape: "circle"
+    },
+    components: normalizeLayoutComponents(patch.components, base.components)
+  };
+}
+
+export function normalizeAssetManifest(
+  patch: Partial<AssetManifest>,
+  base: AssetManifest = defaultAssetManifest()
+): AssetManifest {
+  return {
+    version: 1,
+    revision: intValue(patch.revision, base.revision, 0, Number.MAX_SAFE_INTEGER),
+    assets: Array.isArray(patch.assets)
+      ? patch.assets.map(normalizePetAsset).filter((asset): asset is PetAsset => asset !== null)
+      : base.assets
   };
 }
 
@@ -211,14 +385,115 @@ export function isClientMessage(value: unknown): value is ClientMessage {
   return [
     "browser.hello",
     "config.patch",
+    "layout.preview",
     "device.hello",
     "device.status"
   ].includes(String((value as { type: unknown }).type));
 }
 
+function normalizeLayoutComponents(value: unknown, fallback: LayoutComponent[]) {
+  if (!Array.isArray(value)) {
+    return fallback;
+  }
+
+  const components = value.map(normalizeLayoutComponent).filter(Boolean) as LayoutComponent[];
+  return components.length > 0 ? components : fallback;
+}
+
+function normalizeLayoutComponent(value: unknown): LayoutComponent | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const body = value as Record<string, unknown>;
+  const type = normalizeComponentType(body.type);
+  if (!type) {
+    return null;
+  }
+
+  const fallbackId = `${type}-${Math.random().toString(36).slice(2, 8)}`;
+  const component: LayoutComponent = {
+    id: textValue(body.id, fallbackId, fallbackId),
+    type,
+    label: textValue(body.label, String(body.id ?? type), type),
+    x: intValue(body.x, 120, 0, 240),
+    y: intValue(body.y, 120, 0, 240)
+  };
+
+  const width = optionalInt(body.width, 4, 240);
+  const height = optionalInt(body.height, 4, 240);
+  const scale = optionalNumber(body.scale, 0.1, 8);
+  const radius = optionalInt(body.radius, 4, 140);
+  const startAngle = optionalInt(body.startAngle, -360, 360);
+  const endAngle = optionalInt(body.endAngle, -360, 360);
+
+  if (width !== undefined) component.width = width;
+  if (height !== undefined) component.height = height;
+  if (scale !== undefined) component.scale = scale;
+  if (radius !== undefined) component.radius = radius;
+  if (startAngle !== undefined) component.startAngle = startAngle;
+  if (endAngle !== undefined) component.endAngle = endAngle;
+  if (typeof body.binding === "string") component.binding = body.binding.trim();
+  if (typeof body.assetId === "string") component.assetId = body.assetId.trim();
+  if (typeof body.text === "string") component.text = body.text.trim();
+  if (typeof body.color === "string") component.color = body.color.trim();
+
+  return component;
+}
+
+function normalizePetAsset(value: unknown): PetAsset | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const body = value as Partial<PetAsset>;
+  const id = textValue(body.id, "", "");
+  const path = textValue(body.path, "", "");
+  if (!id || !path) {
+    return null;
+  }
+
+  return {
+    id,
+    name: textValue(body.name, id, id),
+    kind: body.kind === "image" || body.kind === "package" ? body.kind : "sprite",
+    format: textValue(body.format, "binary", "binary"),
+    width: intValue(body.width, 0, 0, 4096),
+    height: intValue(body.height, 0, 0, 4096),
+    frames: intValue(body.frames, 1, 1, 240),
+    fps: intValue(body.fps, 6, 1, 60),
+    size: intValue(body.size, 0, 0, Number.MAX_SAFE_INTEGER),
+    path,
+    createdAt: intValue(body.createdAt, Date.now(), 0, Number.MAX_SAFE_INTEGER),
+    updatedAt: intValue(body.updatedAt, Date.now(), 0, Number.MAX_SAFE_INTEGER)
+  };
+}
+
+function normalizeComponentType(value: unknown): LayoutComponentType | null {
+  return value === "cube" || value === "sprite" || value === "arc" || value === "text" || value === "statusDot"
+    ? value
+    : null;
+}
+
 function intValue(value: unknown, fallback: number, min: number, max: number) {
   const next = Math.round(Number(value ?? fallback));
   return Number.isFinite(next) ? clamp(next, min, max) : fallback;
+}
+
+function optionalInt(value: unknown, min: number, max: number) {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  const next = Math.round(Number(value));
+  return Number.isFinite(next) ? clamp(next, min, max) : undefined;
+}
+
+function optionalNumber(value: unknown, min: number, max: number) {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  const next = Number(value);
+  return Number.isFinite(next) ? clamp(next, min, max) : undefined;
 }
 
 function boolValue(value: unknown, fallback: boolean) {

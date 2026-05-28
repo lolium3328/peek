@@ -9,6 +9,11 @@
 #include "drivers/ImuDriver.h"
 #include "drivers/TouchSensor.h"
 #include "events/TouchEvent.h"
+#include "services/BackendClient.h"
+#include "services/NetworkService.h"
+#include "storage/AssetStore.h"
+#include "storage/FileSystem.h"
+#include "storage/LayoutStore.h"
 #include "ui/ScreenRenderer.h"
 
 class AppController {
@@ -38,6 +43,11 @@ private:
   void handleExtraLongPress();
 
   DeviceConfig config_ = defaultDeviceConfig();
+  FileSystem fileSystem_;
+  LayoutStore layoutStore_;
+  AssetStore assetStore_;
+  NetworkService network_;
+  BackendClient backend_;
   DisplayDriver display_;
   ScreenRenderer screen_;
   TouchSensor touch_;

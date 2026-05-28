@@ -29,3 +29,14 @@ bun run start
 ```
 
 Set `PEEK_HTTPS=0` when plain HTTP is enough during local debugging.
+
+The server is the primary control plane. Browsers talk to the Bun service, and
+the ESP32 talks back to the service from STA mode through `/api/device/sync`.
+The device caches the latest layout and asset manifest in LittleFS so it can
+boot with the last known screen setup even when the server is unavailable.
+
+- Layouts are saved by `PUT /api/layout` and previewed by `POST /api/layout/preview`.
+- Animation assets are uploaded to `POST /api/assets` and exposed through the
+  returned manifest.
+- Firmware stores large editable data in LittleFS and keeps small calibration
+  values in NVS/Preferences.
