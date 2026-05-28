@@ -8,6 +8,6 @@ export const layoutPath = normalize(Bun.env.PEEK_LAYOUT ?? join(dataRoot, "layou
 export const assetsRoot = normalize(Bun.env.PEEK_ASSETS ?? join(dataRoot, "assets"));
 export const assetManifestPath = normalize(join(assetsRoot, "manifest.json"));
 export const assetFilesRoot = normalize(join(assetsRoot, "files"));
-export const httpsEnabled = Bun.env.PEEK_HTTPS !== "0";
+export const httpsEnabled = Bun.env.PEEK_HTTPS === "1";
 export const tlsCertPath = normalize(Bun.env.PEEK_TLS_CERT ?? join(dataRoot, "certs", "peek-local.crt"));
 export const tlsKeyPath = normalize(Bun.env.PEEK_TLS_KEY ?? join(dataRoot, "certs", "peek-local.key"));

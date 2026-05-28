@@ -28,7 +28,8 @@ bun run build
 bun run start
 ```
 
-Set `PEEK_HTTPS=0` when plain HTTP is enough during local debugging.
+The server uses plain HTTP by default. Set `PEEK_HTTPS=1` only when local HTTPS
+is needed.
 
 The server is the primary control plane. Browsers talk to the Bun service, and
 the ESP32 talks back to the service from STA mode through `/api/device/sync`.

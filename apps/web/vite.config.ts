@@ -5,7 +5,7 @@ import { defineConfig } from "vite";
 
 const root = dirname(fileURLToPath(import.meta.url));
 const backendPort = Number(process.env.PORT ?? 3001);
-const httpsEnabled = process.env.PEEK_HTTPS !== "0";
+const httpsEnabled = process.env.PEEK_HTTPS === "1";
 const tlsCertPath = normalize(process.env.PEEK_TLS_CERT ?? join(root, ".peek-data", "certs", "peek-local.crt"));
 const tlsKeyPath = normalize(process.env.PEEK_TLS_KEY ?? join(root, ".peek-data", "certs", "peek-local.key"));
 const viteHttps =

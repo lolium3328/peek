@@ -12,9 +12,9 @@ bun run start
 
 Open the LAN URL printed by the server on desktop or mobile.
 
-The server uses HTTPS by default and creates a local self-signed certificate in
-`.peek-data/certs` on first start. For plain HTTP during debugging, run
-`PEEK_HTTPS=0 bun run start`.
+The server uses plain HTTP by default. To enable local HTTPS, run
+`PEEK_HTTPS=1 bun run start`; that creates a self-signed certificate in
+`.peek-data/certs` on first start.
 
 If Bun is not installed globally yet, prefix commands with `npx`, for example
 `npx bun run start`.
