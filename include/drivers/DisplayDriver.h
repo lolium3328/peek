@@ -2,7 +2,8 @@
 
 #include <stdint.h>
 
-class TFT_eSPI;
+class Arduino_DataBus;
+class Arduino_GFX;
 
 enum class DisplayTextStyle {
   Small,
@@ -33,8 +34,10 @@ private:
   void applyTextStyle(DisplayTextStyle style, uint16_t color);
   void drawBatteryArc(bool leftSide, uint8_t percent);
   void drawArcSegment(int16_t startDeg, int16_t sweepDeg, uint16_t color, uint8_t thickness);
+  void drawArcLine(int16_t startDeg, int16_t sweepDeg, int16_t radius, uint16_t color);
 
-  TFT_eSPI *tft_;
+  Arduino_DataBus *bus_;
+  Arduino_GFX *gfx_;
   uint8_t leftBatteryPercent_ = 92;
   uint8_t rightBatteryPercent_ = 79;
 };
