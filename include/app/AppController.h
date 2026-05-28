@@ -25,6 +25,8 @@ private:
   void renderStatus();
   void updateCubeThrow(uint32_t now);
   void updateCubeScale(uint32_t now);
+  void startCubeRecovery(uint32_t now);
+  void updateCubeRecovery(uint32_t now);
   void detectCubeThrow(uint32_t now);
   void startCubeThrow(uint32_t now, int32_t accelDeltaX, int32_t accelDeltaY, int32_t accelDeltaZ);
   void applyCubeMotion(HomeScreenModel &model, const ImuPose &pose) const;
@@ -56,12 +58,18 @@ private:
   uint32_t cubeScaleRecoverStartMs_ = 0;
   float cubeOffsetX_ = 0.0f;
   float cubeOffsetY_ = 0.0f;
+  float cubeRecoverOffsetStartX_ = 0.0f;
+  float cubeRecoverOffsetStartY_ = 0.0f;
   float cubeRenderScale_ = 32.0f;
+  float cubeRecoverScaleStart_ = 32.0f;
   float cubeVelocityX_ = 0.0f;
   float cubeVelocityY_ = 0.0f;
   float cubeSpinRollDeg_ = 0.0f;
   float cubeSpinPitchDeg_ = 0.0f;
   float cubeSpinYawDeg_ = 0.0f;
+  float cubeRecoverSpinRollStartDeg_ = 0.0f;
+  float cubeRecoverSpinPitchStartDeg_ = 0.0f;
+  float cubeRecoverSpinYawStartDeg_ = 0.0f;
   float cubeSpinRollVelocity_ = 0.0f;
   float cubeSpinPitchVelocity_ = 0.0f;
   float cubeSpinYawVelocity_ = 0.0f;

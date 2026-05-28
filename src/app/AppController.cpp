@@ -59,6 +59,15 @@ float moveFloatToward(float value, float target, float step) {
   }
   return value;
 }
+
+float lerpFloat(float start, float end, float amount) {
+  return start + (end - start) * amount;
+}
+
+float smoothStep(float value) {
+  const float clamped = clampFloat(value, 0.0f, 1.0f);
+  return clamped * clamped * (3.0f - 2.0f * clamped);
+}
 }
 
 AppController::AppController() : screen_(display_) {}
@@ -198,9 +207,14 @@ void AppController::updateCubeScale(uint32_t now) {
     dt = static_cast<float>(kHomeFrameIntervalMs) / 1000.0f;
   }
 
-  const float targetScale = (cubeThrown_ && !cubeScaleRecovering_)
-                                ? kCubeThrownScale
-                                : kCubeNormalScale;
+  if (cubeScaleRecovering_) {
+    const float progress = smoothStep(
+        static_cast<float>(now - cubeScaleRecoverStartMs_) / kCubeScaleRecoverDurationMs);
+    cubeRenderScale_ = lerpFloat(cubeRecoverScaleStart_, kCubeNormalScale, progress);
+    return;
+  }
+
+  const float targetScale = cubeThrown_ ? kCubeThrownScale : kCubeNormalScale;
   const float scaleSpeed = targetScale < cubeRenderScale_
                                ? kCubeScaleShrinkPixelsPerSecond
                                : kCubeScaleGrowPixelsPerSecond;
@@ -220,6 +234,12 @@ void AppController::updateCubeThrow(uint32_t now) {
   if (dt > 0.12f) {
     dt = static_cast<float>(kHomeFrameIntervalMs) / 1000.0f;
   }
+
+  if (cubeScaleRecovering_) {
+    updateCubeRecovery(now);
+    return;
+  }
+
   const float frameScale = dt / (static_cast<float>(kHomeFrameIntervalMs) / 1000.0f);
 
   cubeVelocityX_ += -cubeOffsetX_ * kThrowSpring * dt;
@@ -290,28 +310,72 @@ void AppController::updateCubeThrow(uint32_t now) {
   if (!cubeScaleRecovering_
       && readyForFinalScaleRecover
       && now - lastCubeThrowStartMs_ >= kThrowMinSettleMs) {
-    cubeScaleRecovering_ = true;
-    cubeScaleRecoverStartMs_ = now;
-    Serial.println("Cube final scale recovering");
+    startCubeRecovery(now);
+  }
+}
+
+void AppController::startCubeRecovery(uint32_t now) {
+  cubeScaleRecovering_ = true;
+  cubeScaleRecoverStartMs_ = now;
+  cubeRecoverOffsetStartX_ = cubeOffsetX_;
+  cubeRecoverOffsetStartY_ = cubeOffsetY_;
+  cubeRecoverScaleStart_ = cubeRenderScale_;
+  cubeRecoverSpinRollStartDeg_ = cubeSpinRollDeg_;
+  cubeRecoverSpinPitchStartDeg_ = cubeSpinPitchDeg_;
+  cubeRecoverSpinYawStartDeg_ = cubeSpinYawDeg_;
+  cubeVelocityX_ = 0.0f;
+  cubeVelocityY_ = 0.0f;
+  cubeSpinRollVelocity_ = 0.0f;
+  cubeSpinPitchVelocity_ = 0.0f;
+  cubeSpinYawVelocity_ = 0.0f;
+  Serial.println("Cube final pose recovering");
+}
+
+void AppController::updateCubeRecovery(uint32_t now) {
+  const float linearProgress =
+      static_cast<float>(now - cubeScaleRecoverStartMs_) / kCubeScaleRecoverDurationMs;
+  const float progress = smoothStep(linearProgress);
+
+  cubeOffsetX_ = lerpFloat(cubeRecoverOffsetStartX_, 0.0f, progress);
+  cubeOffsetY_ = lerpFloat(cubeRecoverOffsetStartY_, 0.0f, progress);
+  cubeSpinRollDeg_ = lerpFloat(cubeRecoverSpinRollStartDeg_, 0.0f, progress);
+  cubeSpinPitchDeg_ = lerpFloat(cubeRecoverSpinPitchStartDeg_, 0.0f, progress);
+  cubeSpinYawDeg_ = lerpFloat(cubeRecoverSpinYawStartDeg_, 0.0f, progress);
+
+  if (now - lastCubeThrowLogMs_ >= kThrowLogIntervalMs) {
+    lastCubeThrowLogMs_ = now;
+    Serial.print("Cube recover pose offset ");
+    Serial.print(cubeOffsetX_);
+    Serial.print(",");
+    Serial.print(cubeOffsetY_);
+    Serial.print(" spin ");
+    Serial.print(cubeSpinRollDeg_);
+    Serial.print(",");
+    Serial.print(cubeSpinPitchDeg_);
+    Serial.print(",");
+    Serial.println(cubeSpinYawDeg_);
   }
 
-  if (cubeScaleRecovering_ && now - cubeScaleRecoverStartMs_ >= kCubeScaleRecoverDurationMs) {
-    cubeThrown_ = false;
-    cubeScaleRecovering_ = false;
-    cubeOffsetX_ = 0.0f;
-    cubeOffsetY_ = 0.0f;
-    cubeVelocityX_ = 0.0f;
-    cubeVelocityY_ = 0.0f;
-    cubeSpinRollDeg_ = 0.0f;
-    cubeSpinPitchDeg_ = 0.0f;
-    cubeSpinYawDeg_ = 0.0f;
-    cubeSpinRollVelocity_ = 0.0f;
-    cubeSpinPitchVelocity_ = 0.0f;
-    cubeSpinYawVelocity_ = 0.0f;
-    lastCubeThrowLogMs_ = 0;
-    cubeScaleRecoverStartMs_ = 0;
-    Serial.println("Cube throw settled");
+  if (linearProgress < 1.0f) {
+    return;
   }
+
+  cubeThrown_ = false;
+  cubeScaleRecovering_ = false;
+  cubeOffsetX_ = 0.0f;
+  cubeOffsetY_ = 0.0f;
+  cubeVelocityX_ = 0.0f;
+  cubeVelocityY_ = 0.0f;
+  cubeSpinRollDeg_ = 0.0f;
+  cubeSpinPitchDeg_ = 0.0f;
+  cubeSpinYawDeg_ = 0.0f;
+  cubeRenderScale_ = kCubeNormalScale;
+  cubeSpinRollVelocity_ = 0.0f;
+  cubeSpinPitchVelocity_ = 0.0f;
+  cubeSpinYawVelocity_ = 0.0f;
+  lastCubeThrowLogMs_ = 0;
+  cubeScaleRecoverStartMs_ = 0;
+  Serial.println("Cube throw settled");
 }
 
 void AppController::detectCubeThrow(uint32_t now) {
