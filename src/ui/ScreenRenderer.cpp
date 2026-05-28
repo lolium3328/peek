@@ -19,7 +19,7 @@ constexpr int16_t kCubeCenterY = 117;
 constexpr int16_t kPetAreaX = 61;
 constexpr int16_t kPetAreaY = 61;
 constexpr int16_t kPetAreaSize = 118;
-constexpr float kCubeScale = 32.0f;
+constexpr float kDefaultCubeScale = 32.0f;
 
 struct CubePoint {
   int16_t x = 0;
@@ -154,6 +154,9 @@ void ScreenRenderer::drawPetCube(const HomeScreenModel &model) {
   const float cp = cosf(pitch);
   const float sy = sinf(yaw);
   const float cy = cosf(yaw);
+  const float scale = model.cubeScale > 0.0f ? model.cubeScale : kDefaultCubeScale;
+  const int16_t centerX = kScreenCenter + static_cast<int16_t>(roundf(model.cubeOffsetX));
+  const int16_t centerY = kCubeCenterY + static_cast<int16_t>(roundf(model.cubeOffsetY));
 
   CubePoint points[8];
   for (uint8_t index = 0; index < 8; ++index) {
@@ -168,8 +171,8 @@ void ScreenRenderer::drawPetCube(const HomeScreenModel &model) {
     const float xYaw = xPitch * cy - yRoll * sy;
     const float yYaw = xPitch * sy + yRoll * cy;
 
-    points[index].x = kScreenCenter + static_cast<int16_t>(roundf(xYaw * kCubeScale));
-    points[index].y = kCubeCenterY + static_cast<int16_t>(roundf(yYaw * kCubeScale));
+    points[index].x = centerX + static_cast<int16_t>(roundf(xYaw * scale));
+    points[index].y = centerY + static_cast<int16_t>(roundf(yYaw * scale));
     points[index].z = zPitch;
   }
 

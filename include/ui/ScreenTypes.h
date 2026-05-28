@@ -18,6 +18,9 @@ struct HomeScreenModel {
   float cubeRollDeg = 0.0f;
   float cubePitchDeg = 0.0f;
   float cubeYawDeg = 0.0f;
+  float cubeOffsetX = 0.0f;
+  float cubeOffsetY = 0.0f;
+  float cubeScale = 32.0f;
 };
 
 struct BootScreenModel {
