@@ -16,7 +16,10 @@ constexpr uint16_t kAmber = 0xFDC0;
 constexpr uint16_t kRed = 0xF9C6;
 constexpr int16_t kScreenCenter = 120;
 constexpr int16_t kCubeCenterY = 117;
-constexpr float kCubeScale = 42.0f;
+constexpr int16_t kPetAreaX = 61;
+constexpr int16_t kPetAreaY = 61;
+constexpr int16_t kPetAreaSize = 118;
+constexpr float kCubeScale = 32.0f;
 
 struct CubePoint {
   int16_t x = 0;
@@ -67,6 +70,20 @@ void ScreenRenderer::renderHome(const HomeScreenModel &model) {
   drawBottomHint(model.hintText);
 }
 
+void ScreenRenderer::renderHomeFrame(const HomeScreenModel &model) {
+  clearPetArea();
+
+  if (model.poseAlert) {
+    display_.drawCircle(kScreenCenter, kScreenCenter, 72, kAmber);
+  }
+
+  if (model.cubeVisible) {
+    drawPetCube(model);
+  } else {
+    display_.drawTextCentered(model.primaryText, 122, DisplayTextStyle::Primary, kWhite);
+  }
+}
+
 void ScreenRenderer::renderStatus(const StatusScreenModel &model) {
   char buttonText[20];
   char rssiText[20];
@@ -105,6 +122,10 @@ void ScreenRenderer::drawTopStatus(const HomeScreenModel &model) {
   drawWeatherChip(41, model.localLabel, model.localWeather);
   drawWeatherChip(151, model.peerLabel, model.peerWeather);
   drawConnectionDots(model.wifiConnected, model.backendConnected);
+}
+
+void ScreenRenderer::clearPetArea() {
+  display_.fillRect(kPetAreaX, kPetAreaY, kPetAreaSize, kPetAreaSize, kBlack);
 }
 
 void ScreenRenderer::drawPetCube(const HomeScreenModel &model) {
@@ -146,10 +167,9 @@ void ScreenRenderer::drawPetCube(const HomeScreenModel &model) {
     const float zPitch = -x * sp + zRoll * cp;
     const float xYaw = xPitch * cy - yRoll * sy;
     const float yYaw = xPitch * sy + yRoll * cy;
-    const float depth = 1.0f / (1.0f + zPitch * 0.25f);
 
-    points[index].x = kScreenCenter + static_cast<int16_t>(roundf(xYaw * kCubeScale * depth));
-    points[index].y = kCubeCenterY + static_cast<int16_t>(roundf(yYaw * kCubeScale * depth));
+    points[index].x = kScreenCenter + static_cast<int16_t>(roundf(xYaw * kCubeScale));
+    points[index].y = kCubeCenterY + static_cast<int16_t>(roundf(yYaw * kCubeScale));
     points[index].z = zPitch;
   }
 

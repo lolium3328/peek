@@ -9,10 +9,12 @@ public:
 
   void renderBoot(const BootScreenModel &model);
   void renderHome(const HomeScreenModel &model);
+  void renderHomeFrame(const HomeScreenModel &model);
   void renderStatus(const StatusScreenModel &model);
 
 private:
   void drawTopStatus(const HomeScreenModel &model);
+  void clearPetArea();
   void drawPetCube(const HomeScreenModel &model);
   void drawWeatherChip(int16_t x, const char *label, const char *weather);
   void drawConnectionDots(bool wifiConnected, bool backendConnected);

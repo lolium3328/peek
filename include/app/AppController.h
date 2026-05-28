@@ -21,6 +21,7 @@ public:
 private:
   void showText(size_t index);
   void renderHomeText(const char *text, const char *hintText);
+  void renderHomeFrame();
   void renderStatus();
   void handleCompletedClick();
   void handleLongPress();

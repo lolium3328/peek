@@ -37,7 +37,7 @@ void AppController::loop() {
   imu_.update(now);
 
   if (!statusVisible_ && (now - lastHomeRenderMs_ >= kHomeFrameIntervalMs)) {
-    renderHomeText(pet_.currentText(), pet_.isSleeping() ? "sleeping" : "tap / hold");
+    renderHomeFrame();
   }
 
   const TouchEvent event = touch_.update(now);
@@ -89,6 +89,18 @@ void AppController::renderHomeText(const char *text, const char *hintText) {
   model.cubePitchDeg = pose.pitchDeg;
   model.cubeYawDeg = pose.yawDeg;
   screen_.renderHome(model);
+  lastHomeRenderMs_ = millis();
+}
+
+void AppController::renderHomeFrame() {
+  const ImuPose &pose = imu_.pose();
+  HomeScreenModel model;
+  model.primaryText = pose.valid ? pet_.currentText() : "imu?";
+  model.cubeVisible = pose.valid;
+  model.cubeRollDeg = pose.rollDeg;
+  model.cubePitchDeg = pose.pitchDeg;
+  model.cubeYawDeg = pose.yawDeg;
+  screen_.renderHomeFrame(model);
   lastHomeRenderMs_ = millis();
 }
 
