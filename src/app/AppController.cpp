@@ -14,13 +14,14 @@ void AppController::begin() {
     }
   }
 
+  touch_.begin(config_);
+  const bool imuReady = imu_.begin();
+
   BootScreenModel bootModel;
   bootModel.title = "Peek";
-  bootModel.message = "display ok";
+  bootModel.message = imuReady ? "imu ok" : "imu missing";
   screen_.renderBoot(bootModel);
-  delay(300);
-
-  touch_.begin(config_);
+  delay(500);
 
   Serial.println("FSR402 test start");
   showText(0);
@@ -29,6 +30,8 @@ void AppController::begin() {
 
 void AppController::loop() {
   const uint32_t now = millis();
+  imu_.update(now);
+
   const TouchEvent event = touch_.update(now);
   if (!event.sampled) {
     return;
@@ -74,6 +77,19 @@ void AppController::renderHomeText(const char *text, const char *hintText) {
   screen_.renderHome(model);
 }
 
+void AppController::renderStatus() {
+  StatusScreenModel model;
+  model.touchAnalog = touch_.lastValue();
+  model.wifiRssi = 0;
+  model.localBatteryPercent = 92;
+  model.peerBatteryPercent = 79;
+  model.backendConnected = false;
+  model.imuReady = imu_.isReady();
+  model.imuAddress = imu_.address();
+  model.imuAccelZ = imu_.lastSample().accelZ;
+  screen_.renderStatus(model);
+}
+
 void AppController::handleCompletedClick() {
   pet_.advanceAfterClick();
   renderHomeText(pet_.currentText(), "short press");
@@ -84,8 +100,7 @@ void AppController::handleCompletedClick() {
 
 void AppController::handleLongPress() {
   pet_.wakeForLongPress();
-  renderHomeText(config_.longPressText, "long press");
+  renderStatus();
 
-  Serial.print("Long press -> ");
-  Serial.println(config_.longPressText);
+  Serial.println("Long press -> status");
 }

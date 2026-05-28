@@ -57,22 +57,32 @@ void ScreenRenderer::renderHome(const HomeScreenModel &model) {
 void ScreenRenderer::renderStatus(const StatusScreenModel &model) {
   char touchText[20];
   char rssiText[20];
+  char imuText[20];
+  char accelText[20];
   char localBatteryText[20];
   char peerBatteryText[20];
 
   snprintf(touchText, sizeof(touchText), "touch %u", model.touchAnalog);
   snprintf(rssiText, sizeof(rssiText), "rssi %d", model.wifiRssi);
+  if (model.imuReady) {
+    snprintf(imuText, sizeof(imuText), "imu ok 0x%02X", model.imuAddress);
+  } else {
+    snprintf(imuText, sizeof(imuText), "imu missing");
+  }
+  snprintf(accelText, sizeof(accelText), "az %d", model.imuAccelZ);
   snprintf(localBatteryText, sizeof(localBatteryText), "A %u%%", model.localBatteryPercent);
   snprintf(peerBatteryText, sizeof(peerBatteryText), "B %u%%", model.peerBatteryPercent);
 
   display_.clear(kBlack);
   display_.drawBatteryBars(model.localBatteryPercent, model.peerBatteryPercent);
-  display_.drawTextCentered("status", 54, DisplayTextStyle::Small, kBlue);
-  display_.drawTextCentered(touchText, 93, DisplayTextStyle::Small, kWhite);
-  display_.drawTextCentered(rssiText, 116, DisplayTextStyle::Small, kWhite);
-  display_.drawTextCentered(localBatteryText, 139, DisplayTextStyle::Small, batteryColor(model.localBatteryPercent));
-  display_.drawTextCentered(peerBatteryText, 162, DisplayTextStyle::Small, batteryColor(model.peerBatteryPercent));
-  drawStatusPill(78, 184, model.backendConnected ? "backend ok" : "backend off", stateColor(model.backendConnected));
+  display_.drawTextCentered("status", 48, DisplayTextStyle::Small, kBlue);
+  display_.drawTextCentered(touchText, 76, DisplayTextStyle::Small, kWhite);
+  display_.drawTextCentered(imuText, 99, DisplayTextStyle::Small, stateColor(model.imuReady));
+  display_.drawTextCentered(accelText, 122, DisplayTextStyle::Small, kWhite);
+  display_.drawTextCentered(rssiText, 145, DisplayTextStyle::Small, kWhite);
+  display_.drawTextCentered(localBatteryText, 168, DisplayTextStyle::Small, batteryColor(model.localBatteryPercent));
+  display_.drawTextCentered(peerBatteryText, 191, DisplayTextStyle::Small, batteryColor(model.peerBatteryPercent));
+  drawStatusPill(78, 205, model.backendConnected ? "backend ok" : "backend off", stateColor(model.backendConnected));
 }
 
 void ScreenRenderer::drawTopStatus(const HomeScreenModel &model) {

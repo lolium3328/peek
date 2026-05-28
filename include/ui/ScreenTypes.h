@@ -27,4 +27,7 @@ struct StatusScreenModel {
   uint8_t localBatteryPercent = 92;
   uint8_t peerBatteryPercent = 79;
   bool backendConnected = false;
+  bool imuReady = false;
+  uint8_t imuAddress = 0;
+  int16_t imuAccelZ = 0;
 };
