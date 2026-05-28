@@ -10,6 +10,9 @@ constexpr uint32_t kThrowCooldownMs = 900;
 constexpr uint32_t kThrowMinSettleMs = 1400;
 constexpr uint32_t kThrowLogIntervalMs = 200;
 constexpr int32_t kThrowAccelDeltaThreshold = 7200;
+constexpr float kCubeNormalScale = 32.0f;
+constexpr float kCubeThrownScale = 18.0f;
+constexpr float kCubeScalePixelsPerSecond = 24.0f;
 constexpr float kThrowVelocityScale = 0.040f;
 constexpr float kThrowSpinScale = 0.026f;
 constexpr float kThrowZProjection = 0.42f;
@@ -38,6 +41,16 @@ float clampFloat(float value, float minimum, float maximum) {
   }
   if (value > maximum) {
     return maximum;
+  }
+  return value;
+}
+
+float moveFloatToward(float value, float target, float step) {
+  if (value < target) {
+    return value + step > target ? target : value + step;
+  }
+  if (value > target) {
+    return value - step < target ? target : value - step;
   }
   return value;
 }
@@ -74,6 +87,7 @@ void AppController::loop() {
   imu_.update(now);
   detectCubeThrow(now);
   updateCubeThrow(now);
+  updateCubeScale(now);
 
   if (!statusVisible_ && (now - lastHomeRenderMs_ >= kHomeFrameIntervalMs)) {
     renderHomeFrame();
@@ -162,6 +176,27 @@ void AppController::renderStatus() {
   model.imuRollDeg = pose.rollDeg;
   model.imuPitchDeg = pose.pitchDeg;
   screen_.renderStatus(model);
+}
+
+void AppController::updateCubeScale(uint32_t now) {
+  if (lastCubeScaleUpdateMs_ == 0) {
+    lastCubeScaleUpdateMs_ = now;
+    return;
+  }
+
+  float dt = static_cast<float>(now - lastCubeScaleUpdateMs_) / 1000.0f;
+  if (dt <= 0.0f) {
+    return;
+  }
+  lastCubeScaleUpdateMs_ = now;
+  if (dt > 0.12f) {
+    dt = static_cast<float>(kHomeFrameIntervalMs) / 1000.0f;
+  }
+
+  const float targetScale = cubeThrown_ ? kCubeThrownScale : kCubeNormalScale;
+  cubeRenderScale_ = moveFloatToward(cubeRenderScale_,
+                                     targetScale,
+                                     kCubeScalePixelsPerSecond * dt);
 }
 
 void AppController::updateCubeThrow(uint32_t now) {
@@ -348,7 +383,7 @@ void AppController::startCubeThrow(
 void AppController::applyCubeMotion(HomeScreenModel &model, const ImuPose &pose) const {
   model.cubeVisible = pose.valid;
   if (!pose.valid) {
-    model.cubeScale = 32.0f;
+    model.cubeScale = cubeRenderScale_;
     return;
   }
 
@@ -357,7 +392,7 @@ void AppController::applyCubeMotion(HomeScreenModel &model, const ImuPose &pose)
   model.cubeYawDeg = relativeDegrees(pose.yawDeg, cubeYawZeroDeg_) + cubeSpinYawDeg_;
   model.cubeOffsetX = cubeOffsetX_;
   model.cubeOffsetY = cubeOffsetY_;
-  model.cubeScale = cubeThrown_ ? 18.0f : 32.0f;
+  model.cubeScale = cubeRenderScale_;
 }
 
 void AppController::centerCube() {
