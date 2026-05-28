@@ -15,12 +15,16 @@ constexpr uint8_t kRegisterAccelConfig = 0x1C;
 constexpr uint8_t kRegisterAccelXHigh = 0x3B;
 constexpr uint8_t kRegisterPowerManagement1 = 0x6B;
 constexpr uint8_t kRegisterWhoAmI = 0x75;
-constexpr uint8_t kExpectedWhoAmI = 0x68;
 constexpr uint32_t kSampleIntervalMs = 50;
 constexpr uint32_t kLogIntervalMs = 500;
+constexpr uint32_t kRetryIntervalMs = 2000;
 
 int16_t readSigned16(const uint8_t *buffer, uint8_t offset) {
   return static_cast<int16_t>((static_cast<uint16_t>(buffer[offset]) << 8) | buffer[offset + 1]);
+}
+
+bool isSupportedWhoAmI(uint8_t whoAmI) {
+  return whoAmI == 0x68 || whoAmI == 0x70 || whoAmI == 0x71;
 }
 } // namespace
 
@@ -64,8 +68,8 @@ bool ImuDriver::begin() {
   Serial.print(" whoami 0x");
   Serial.println(whoAmI_, HEX);
 
-  if (whoAmI_ != kExpectedWhoAmI) {
-    Serial.println("IMU: unexpected WHO_AM_I");
+  if (!isSupportedWhoAmI(whoAmI_)) {
+    Serial.println("IMU: unsupported WHO_AM_I");
     return false;
   }
 
@@ -87,6 +91,44 @@ bool ImuDriver::begin() {
 
 void ImuDriver::update(uint32_t now) {
   if (!ready_) {
+    if (now - lastLogMs_ >= kRetryIntervalMs) {
+      lastLogMs_ = now;
+      Serial.println("IMU: offline, retrying");
+      scanBus();
+
+      if (probeAddress(kAddressLow)) {
+        address_ = kAddressLow;
+      } else if (probeAddress(kAddressHigh)) {
+        address_ = kAddressHigh;
+      } else {
+        Serial.println("IMU: still missing, expected 0x68 or 0x69");
+        return;
+      }
+
+      if (!readRegister(kRegisterWhoAmI, whoAmI_)) {
+        Serial.println("IMU: retry WHO_AM_I read failed");
+        return;
+      }
+
+      Serial.print("IMU: retry found address 0x");
+      Serial.print(address_, HEX);
+      Serial.print(" whoami 0x");
+      Serial.println(whoAmI_, HEX);
+
+      if (!isSupportedWhoAmI(whoAmI_)) {
+        Serial.println("IMU: retry unsupported WHO_AM_I");
+        return;
+      }
+
+      writeRegister(kRegisterPowerManagement1, 0x00);
+      delay(100);
+      writeRegister(kRegisterSampleRate, 0x04);
+      writeRegister(kRegisterConfig, 0x03);
+      writeRegister(kRegisterGyroConfig, 0x00);
+      writeRegister(kRegisterAccelConfig, 0x00);
+      ready_ = readSample();
+      Serial.println(ready_ ? "IMU: retry ready" : "IMU: retry sample failed");
+    }
     return;
   }
 
