@@ -49,6 +49,7 @@ private:
   int16_t previousAccelZ_ = 0;
   uint32_t lastCubeThrowUpdateMs_ = 0;
   uint32_t lastCubeThrowStartMs_ = 0;
+  uint32_t lastCubeThrowLogMs_ = 0;
   float cubeOffsetX_ = 0.0f;
   float cubeOffsetY_ = 0.0f;
   float cubeVelocityX_ = 0.0f;

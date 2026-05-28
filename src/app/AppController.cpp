@@ -8,6 +8,7 @@ namespace {
 constexpr uint32_t kHomeFrameIntervalMs = 75;
 constexpr uint32_t kThrowCooldownMs = 900;
 constexpr uint32_t kThrowMinSettleMs = 1400;
+constexpr uint32_t kThrowLogIntervalMs = 200;
 constexpr int32_t kThrowAccelDeltaThreshold = 7200;
 constexpr float kThrowVelocityScale = 0.040f;
 constexpr float kThrowSpinScale = 0.026f;
@@ -169,10 +170,14 @@ void AppController::updateCubeThrow(uint32_t now) {
   }
 
   float dt = static_cast<float>(now - lastCubeThrowUpdateMs_) / 1000.0f;
+  if (dt <= 0.0f) {
+    return;
+  }
   lastCubeThrowUpdateMs_ = now;
-  if (dt <= 0.0f || dt > 0.12f) {
+  if (dt > 0.12f) {
     dt = static_cast<float>(kHomeFrameIntervalMs) / 1000.0f;
   }
+  const float frameScale = dt / (static_cast<float>(kHomeFrameIntervalMs) / 1000.0f);
 
   cubeVelocityX_ += -cubeOffsetX_ * kThrowSpring * dt;
   cubeVelocityY_ += -cubeOffsetY_ * kThrowSpring * dt;
@@ -190,11 +195,20 @@ void AppController::updateCubeThrow(uint32_t now) {
     if (normalVelocity > 0.0f) {
       cubeVelocityX_ -= (1.0f + kThrowBounceDamping) * normalVelocity * normalX;
       cubeVelocityY_ -= (1.0f + kThrowBounceDamping) * normalVelocity * normalY;
+      Serial.print("Cube throw bounce offset ");
+      Serial.print(cubeOffsetX_);
+      Serial.print(",");
+      Serial.print(cubeOffsetY_);
+      Serial.print(" velocity ");
+      Serial.print(cubeVelocityX_);
+      Serial.print(",");
+      Serial.println(cubeVelocityY_);
     }
   }
 
-  cubeVelocityX_ *= kThrowVelocityDamping;
-  cubeVelocityY_ *= kThrowVelocityDamping;
+  const float velocityDamping = powf(kThrowVelocityDamping, frameScale);
+  cubeVelocityX_ *= velocityDamping;
+  cubeVelocityY_ *= velocityDamping;
 
   cubeSpinRollVelocity_ += -cubeSpinRollDeg_ * kThrowSpinSpring * dt;
   cubeSpinPitchVelocity_ += -cubeSpinPitchDeg_ * kThrowSpinSpring * dt;
@@ -202,9 +216,28 @@ void AppController::updateCubeThrow(uint32_t now) {
   cubeSpinRollDeg_ += cubeSpinRollVelocity_ * dt;
   cubeSpinPitchDeg_ += cubeSpinPitchVelocity_ * dt;
   cubeSpinYawDeg_ += cubeSpinYawVelocity_ * dt;
-  cubeSpinRollVelocity_ *= kThrowSpinDamping;
-  cubeSpinPitchVelocity_ *= kThrowSpinDamping;
-  cubeSpinYawVelocity_ *= kThrowSpinDamping;
+  const float spinDamping = powf(kThrowSpinDamping, frameScale);
+  cubeSpinRollVelocity_ *= spinDamping;
+  cubeSpinPitchVelocity_ *= spinDamping;
+  cubeSpinYawVelocity_ *= spinDamping;
+
+  if (now - lastCubeThrowLogMs_ >= kThrowLogIntervalMs) {
+    lastCubeThrowLogMs_ = now;
+    Serial.print("Cube throw frame offset ");
+    Serial.print(cubeOffsetX_);
+    Serial.print(",");
+    Serial.print(cubeOffsetY_);
+    Serial.print(" velocity ");
+    Serial.print(cubeVelocityX_);
+    Serial.print(",");
+    Serial.print(cubeVelocityY_);
+    Serial.print(" spin ");
+    Serial.print(cubeSpinRollDeg_);
+    Serial.print(",");
+    Serial.print(cubeSpinPitchDeg_);
+    Serial.print(",");
+    Serial.println(cubeSpinYawDeg_);
+  }
 
   const bool settled = fabsf(cubeOffsetX_) < 0.8f
                        && fabsf(cubeOffsetY_) < 0.8f
@@ -225,6 +258,7 @@ void AppController::updateCubeThrow(uint32_t now) {
     cubeSpinRollVelocity_ = 0.0f;
     cubeSpinPitchVelocity_ = 0.0f;
     cubeSpinYawVelocity_ = 0.0f;
+    lastCubeThrowLogMs_ = 0;
     Serial.println("Cube throw settled");
   }
 }
@@ -266,6 +300,7 @@ void AppController::startCubeThrow(
   cubeThrown_ = true;
   lastCubeThrowStartMs_ = now;
   lastCubeThrowUpdateMs_ = now;
+  lastCubeThrowLogMs_ = now;
 
   float launchX = static_cast<float>(accelDeltaX)
                   + static_cast<float>(accelDeltaZ) * kThrowZProjection;
@@ -346,6 +381,7 @@ void AppController::centerCube() {
   cubeSpinRollVelocity_ = 0.0f;
   cubeSpinPitchVelocity_ = 0.0f;
   cubeSpinYawVelocity_ = 0.0f;
+  lastCubeThrowLogMs_ = 0;
   Serial.print("Cube centered at ");
   Serial.print(cubeRollZeroDeg_);
   Serial.print(",");
