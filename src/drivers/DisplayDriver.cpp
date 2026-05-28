@@ -1,9 +1,8 @@
 #include "drivers/DisplayDriver.h"
 
 #include <Arduino.h>
-#include <Arduino_GFX_Library.h>
+#include <TFT_eSPI.h>
 
-#include "Pins.h"
 #include "assets/fonts/magicalmond_ogyg820pt7b.h"
 
 namespace {
@@ -15,11 +14,12 @@ constexpr int16_t kRightBatteryStartDeg = 38;
 constexpr int16_t kBatteryArcSweepDeg = 76;
 constexpr uint8_t kBatteryArcThickness = 2;
 constexpr uint8_t kBatteryTrackThickness = 1;
-constexpr int16_t kArcStepDeg = 1;
 constexpr uint16_t kBatteryTrackColor = 0x18E3;
 constexpr uint16_t kBatteryHighColor = 0x05F4;
 constexpr uint16_t kBatteryMidColor = 0xFDC0;
 constexpr uint16_t kBatteryLowColor = 0xF9C6;
+constexpr uint16_t kBlack = 0x0000;
+constexpr uint16_t kWhite = 0xFFFF;
 
 uint8_t clampPercent(uint8_t percent) {
   return percent > 100 ? 100 : percent;
@@ -35,41 +35,32 @@ uint16_t batteryColor(uint8_t percent) {
   return kBatteryHighColor;
 }
 
-uint16_t scaleColor(uint16_t color, uint8_t amount) {
-  const uint8_t r = ((color >> 11) & 0x1F) * amount / 255;
-  const uint8_t g = ((color >> 5) & 0x3F) * amount / 255;
-  const uint8_t b = (color & 0x1F) * amount / 255;
-  return (static_cast<uint16_t>(r) << 11) | (static_cast<uint16_t>(g) << 5) | b;
+uint32_t toTftArcAngle(int16_t mathAngle) {
+  int32_t angle = static_cast<int32_t>(mathAngle) + 270;
+  angle %= 360;
+  if (angle < 0) {
+    angle += 360;
+  }
+  return static_cast<uint32_t>(angle);
 }
 } // namespace
 
-DisplayDriver::DisplayDriver()
-    : bus_(new Arduino_ESP32SPI(
-          Pins::TFT_DC,
-          Pins::TFT_CS,
-          Pins::TFT_SCK,
-          Pins::TFT_MOSI,
-          GFX_NOT_DEFINED)),
-      gfx_(new Arduino_GC9A01(
-          bus_,
-          Pins::TFT_RST,
-          0,
-          true,
-          240,
-          240)) {}
+DisplayDriver::DisplayDriver() : tft_(new TFT_eSPI()) {}
 
 bool DisplayDriver::begin() {
-  return gfx_->begin();
+  tft_->begin();
+  tft_->setRotation(0);
+  return true;
 }
 
 void DisplayDriver::clear(uint16_t color) {
-  gfx_->fillScreen(color);
+  tft_->fillScreen(color);
 }
 
 void DisplayDriver::drawTextCentered(const char *text) {
-  clear(BLACK);
+  clear(kBlack);
   drawBatteryBars();
-  drawTextCentered(text, kScreenCenter, DisplayTextStyle::Primary, WHITE);
+  drawTextCentered(text, kScreenCenter, DisplayTextStyle::Primary, kWhite);
 }
 
 void DisplayDriver::drawTextCentered(
@@ -78,17 +69,9 @@ void DisplayDriver::drawTextCentered(
     DisplayTextStyle style,
     uint16_t color) {
   applyTextStyle(style, color);
-
-  int16_t x1;
-  int16_t y1;
-  uint16_t w;
-  uint16_t h;
-  gfx_->getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
-
-  const int16_t x = (kScreenSize - static_cast<int16_t>(w)) / 2 - x1;
-  const int16_t y = centerY - static_cast<int16_t>(h) / 2 - y1;
-  gfx_->setCursor(x, y);
-  gfx_->println(text);
+  tft_->setTextDatum(MC_DATUM);
+  tft_->drawString(text, kScreenCenter, centerY);
+  tft_->setTextDatum(TL_DATUM);
 }
 
 void DisplayDriver::drawText(
@@ -98,8 +81,8 @@ void DisplayDriver::drawText(
     DisplayTextStyle style,
     uint16_t color) {
   applyTextStyle(style, color);
-  gfx_->setCursor(x, y);
-  gfx_->print(text);
+  tft_->setTextDatum(TL_DATUM);
+  tft_->drawString(text, x, y);
 }
 
 void DisplayDriver::setBatteryBars(uint8_t leftPercent, uint8_t rightPercent) {
@@ -118,11 +101,11 @@ void DisplayDriver::drawBatteryBars(uint8_t leftPercent, uint8_t rightPercent) {
 }
 
 void DisplayDriver::drawCircle(int16_t x, int16_t y, int16_t radius, uint16_t color) {
-  gfx_->drawCircle(x, y, radius, color);
+  tft_->drawCircle(x, y, radius, color);
 }
 
 void DisplayDriver::fillCircle(int16_t x, int16_t y, int16_t radius, uint16_t color) {
-  gfx_->fillCircle(x, y, radius, color);
+  tft_->fillCircle(x, y, radius, color);
 }
 
 void DisplayDriver::drawLine(
@@ -131,7 +114,7 @@ void DisplayDriver::drawLine(
     int16_t x1,
     int16_t y1,
     uint16_t color) {
-  gfx_->drawLine(x0, y0, x1, y1, color);
+  tft_->drawLine(x0, y0, x1, y1, color);
 }
 
 void DisplayDriver::drawRoundRect(
@@ -141,7 +124,7 @@ void DisplayDriver::drawRoundRect(
     int16_t height,
     int16_t radius,
     uint16_t color) {
-  gfx_->drawRoundRect(x, y, width, height, radius, color);
+  tft_->drawRoundRect(x, y, width, height, radius, color);
 }
 
 void DisplayDriver::fillRoundRect(
@@ -151,7 +134,7 @@ void DisplayDriver::fillRoundRect(
     int16_t height,
     int16_t radius,
     uint16_t color) {
-  gfx_->fillRoundRect(x, y, width, height, radius, color);
+  tft_->fillRoundRect(x, y, width, height, radius, color);
 }
 
 void DisplayDriver::drawRect(
@@ -160,7 +143,7 @@ void DisplayDriver::drawRect(
     int16_t width,
     int16_t height,
     uint16_t color) {
-  gfx_->drawRect(x, y, width, height, color);
+  tft_->drawRect(x, y, width, height, color);
 }
 
 void DisplayDriver::fillRect(
@@ -169,19 +152,20 @@ void DisplayDriver::fillRect(
     int16_t width,
     int16_t height,
     uint16_t color) {
-  gfx_->fillRect(x, y, width, height, color);
+  tft_->fillRect(x, y, width, height, color);
 }
 
 void DisplayDriver::applyTextStyle(DisplayTextStyle style, uint16_t color) {
-  gfx_->setTextColor(color);
-  gfx_->setTextSize(1);
+  tft_->setTextColor(color);
+  tft_->setTextSize(1);
 
   if (style == DisplayTextStyle::Primary) {
-    gfx_->setFont(&magicalmond_ogyg820pt7b);
+    tft_->setFreeFont(&magicalmond_ogyg820pt7b);
     return;
   }
 
-  gfx_->setFont(nullptr);
+  tft_->setFreeFont(nullptr);
+  tft_->setTextFont(1);
 }
 
 void DisplayDriver::drawBatteryArc(bool leftSide, uint8_t percent) {
@@ -204,37 +188,39 @@ void DisplayDriver::drawArcSegment(
     int16_t sweepDeg,
     uint16_t color,
     uint8_t thickness) {
-  const int16_t coreHalfWidth = thickness > 1 ? 1 : 0;
-  const uint16_t edgeColor = scaleColor(color, 92);
-
-  drawArcLine(startDeg, sweepDeg, kBatteryArcRadius - coreHalfWidth - 1, edgeColor);
-  drawArcLine(startDeg, sweepDeg, kBatteryArcRadius + coreHalfWidth + 1, edgeColor);
-
-  for (int16_t offset = -coreHalfWidth; offset <= coreHalfWidth; ++offset) {
-    drawArcLine(startDeg, sweepDeg, kBatteryArcRadius + offset, color);
+  if (sweepDeg == 0) {
+    return;
   }
-}
 
-void DisplayDriver::drawArcLine(
-    int16_t startDeg,
-    int16_t sweepDeg,
-    int16_t radius,
-    uint16_t color) {
-  const int16_t step = sweepDeg >= 0 ? kArcStepDeg : -kArcStepDeg;
   const int16_t endDeg = startDeg + sweepDeg;
+  const uint32_t arcStart = sweepDeg > 0 ? toTftArcAngle(startDeg) : toTftArcAngle(endDeg);
+  const uint32_t arcEnd = sweepDeg > 0 ? toTftArcAngle(endDeg) : toTftArcAngle(startDeg);
+  const uint32_t innerRadius = kBatteryArcRadius > thickness
+                                   ? kBatteryArcRadius - thickness + 1
+                                   : kBatteryArcRadius;
 
-  for (int16_t deg = startDeg; sweepDeg >= 0 ? deg != endDeg : deg != endDeg; deg += step) {
-    int16_t nextDeg = deg + step;
-    if (sweepDeg >= 0 ? nextDeg > endDeg : nextDeg < endDeg) {
-      nextDeg = endDeg;
-    }
-
-    const float radians = deg * DEG_TO_RAD;
-    const float nextRadians = nextDeg * DEG_TO_RAD;
-    const int16_t x0 = kScreenCenter + static_cast<int16_t>(round(cos(radians) * radius));
-    const int16_t y0 = kScreenCenter + static_cast<int16_t>(round(sin(radians) * radius));
-    const int16_t x1 = kScreenCenter + static_cast<int16_t>(round(cos(nextRadians) * radius));
-    const int16_t y1 = kScreenCenter + static_cast<int16_t>(round(sin(nextRadians) * radius));
-    gfx_->drawLine(x0, y0, x1, y1, color);
+  if (thickness == 1) {
+    tft_->drawSmoothArc(
+        kScreenCenter,
+        kScreenCenter,
+        kBatteryArcRadius,
+        kBatteryArcRadius,
+        arcStart,
+        arcEnd,
+        color,
+        kBlack,
+        true);
+    return;
   }
+
+  tft_->drawSmoothArc(
+      kScreenCenter,
+      kScreenCenter,
+      kBatteryArcRadius,
+      innerRadius,
+      arcStart,
+      arcEnd,
+      color,
+      kBlack,
+      true);
 }
