@@ -34,6 +34,13 @@ uint16_t batteryColor(uint8_t percent) {
   }
   return kBatteryHighColor;
 }
+
+uint16_t scaleColor(uint16_t color, uint8_t amount) {
+  const uint8_t r = ((color >> 11) & 0x1F) * amount / 255;
+  const uint8_t g = ((color >> 5) & 0x3F) * amount / 255;
+  const uint8_t b = (color & 0x1F) * amount / 255;
+  return (static_cast<uint16_t>(r) << 11) | (static_cast<uint16_t>(g) << 5) | b;
+}
 } // namespace
 
 DisplayDriver::DisplayDriver()
@@ -197,13 +204,37 @@ void DisplayDriver::drawArcSegment(
     int16_t sweepDeg,
     uint16_t color,
     uint8_t thickness) {
+  const int16_t coreHalfWidth = thickness > 1 ? 1 : 0;
+  const uint16_t edgeColor = scaleColor(color, 92);
+
+  drawArcLine(startDeg, sweepDeg, kBatteryArcRadius - coreHalfWidth - 1, edgeColor);
+  drawArcLine(startDeg, sweepDeg, kBatteryArcRadius + coreHalfWidth + 1, edgeColor);
+
+  for (int16_t offset = -coreHalfWidth; offset <= coreHalfWidth; ++offset) {
+    drawArcLine(startDeg, sweepDeg, kBatteryArcRadius + offset, color);
+  }
+}
+
+void DisplayDriver::drawArcLine(
+    int16_t startDeg,
+    int16_t sweepDeg,
+    int16_t radius,
+    uint16_t color) {
   const int16_t step = sweepDeg >= 0 ? kArcStepDeg : -kArcStepDeg;
   const int16_t endDeg = startDeg + sweepDeg;
 
-  for (int16_t deg = startDeg; sweepDeg >= 0 ? deg <= endDeg : deg >= endDeg; deg += step) {
+  for (int16_t deg = startDeg; sweepDeg >= 0 ? deg != endDeg : deg != endDeg; deg += step) {
+    int16_t nextDeg = deg + step;
+    if (sweepDeg >= 0 ? nextDeg > endDeg : nextDeg < endDeg) {
+      nextDeg = endDeg;
+    }
+
     const float radians = deg * DEG_TO_RAD;
-    const int16_t x = kScreenCenter + static_cast<int16_t>(cos(radians) * kBatteryArcRadius);
-    const int16_t y = kScreenCenter + static_cast<int16_t>(sin(radians) * kBatteryArcRadius);
-    gfx_->fillCircle(x, y, thickness, color);
+    const float nextRadians = nextDeg * DEG_TO_RAD;
+    const int16_t x0 = kScreenCenter + static_cast<int16_t>(round(cos(radians) * radius));
+    const int16_t y0 = kScreenCenter + static_cast<int16_t>(round(sin(radians) * radius));
+    const int16_t x1 = kScreenCenter + static_cast<int16_t>(round(cos(nextRadians) * radius));
+    const int16_t y1 = kScreenCenter + static_cast<int16_t>(round(sin(nextRadians) * radius));
+    gfx_->drawLine(x0, y0, x1, y1, color);
   }
 }
