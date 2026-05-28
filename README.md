@@ -13,7 +13,11 @@ Peek is a firmware-first monorepo for a round-screen ESP32-S3 pet device.
 
 ```bash
 uvx --with pip --from platformio platformio run
+scripts/upload-firmware.sh
 ```
+
+`scripts/upload-firmware.sh` defaults to `/dev/ttyACM0`. Override it with
+`PEEK_UPLOAD_PORT=/dev/ttyUSB0 scripts/upload-firmware.sh` when needed.
 
 ## Web Config Service
 
