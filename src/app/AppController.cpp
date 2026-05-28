@@ -9,14 +9,14 @@ constexpr uint32_t kHomeFrameIntervalMs = 75;
 constexpr uint32_t kThrowCooldownMs = 900;
 constexpr uint32_t kThrowMinSettleMs = 1400;
 constexpr int32_t kThrowAccelDeltaThreshold = 7200;
-constexpr float kThrowVelocityScale = 0.024f;
-constexpr float kThrowSpinScale = 0.018f;
-constexpr float kThrowBounds = 27.0f;
-constexpr float kThrowSpring = 7.0f;
-constexpr float kThrowVelocityDamping = 0.90f;
-constexpr float kThrowBounceDamping = 0.62f;
-constexpr float kThrowSpinSpring = 5.0f;
-constexpr float kThrowSpinDamping = 0.91f;
+constexpr float kThrowVelocityScale = 0.040f;
+constexpr float kThrowSpinScale = 0.026f;
+constexpr float kThrowCircleRadius = 84.0f;
+constexpr float kThrowSpring = 3.6f;
+constexpr float kThrowVelocityDamping = 0.94f;
+constexpr float kThrowBounceDamping = 0.72f;
+constexpr float kThrowSpinSpring = 3.8f;
+constexpr float kThrowSpinDamping = 0.94f;
 
 float relativeDegrees(float value, float zero) {
   float degrees = value - zero;
@@ -129,8 +129,19 @@ void AppController::renderHomeFrame() {
   const ImuPose &pose = imu_.pose();
   HomeScreenModel model;
   model.primaryText = pose.valid ? pet_.currentText() : "imu?";
+  model.hintText = pet_.isSleeping() ? "sleeping" : "tap / hold";
+  model.localWeather = "--";
+  model.peerWeather = "--";
+  model.localBatteryPercent = 92;
+  model.peerBatteryPercent = 79;
+  model.wifiConnected = false;
+  model.backendConnected = false;
   applyCubeMotion(model, pose);
-  screen_.renderHomeFrame(model);
+  if (cubeThrown_) {
+    screen_.renderHome(model);
+  } else {
+    screen_.renderHomeFrame(model);
+  }
   lastHomeRenderMs_ = millis();
 }
 
@@ -166,20 +177,18 @@ void AppController::updateCubeThrow(uint32_t now) {
   cubeOffsetX_ += cubeVelocityX_ * dt;
   cubeOffsetY_ += cubeVelocityY_ * dt;
 
-  if (cubeOffsetX_ > kThrowBounds) {
-    cubeOffsetX_ = kThrowBounds;
-    cubeVelocityX_ = -fabsf(cubeVelocityX_) * kThrowBounceDamping;
-  } else if (cubeOffsetX_ < -kThrowBounds) {
-    cubeOffsetX_ = -kThrowBounds;
-    cubeVelocityX_ = fabsf(cubeVelocityX_) * kThrowBounceDamping;
-  }
+  const float distance = sqrtf(cubeOffsetX_ * cubeOffsetX_ + cubeOffsetY_ * cubeOffsetY_);
+  if (distance > kThrowCircleRadius) {
+    const float normalX = cubeOffsetX_ / distance;
+    const float normalY = cubeOffsetY_ / distance;
+    cubeOffsetX_ = normalX * kThrowCircleRadius;
+    cubeOffsetY_ = normalY * kThrowCircleRadius;
 
-  if (cubeOffsetY_ > kThrowBounds) {
-    cubeOffsetY_ = kThrowBounds;
-    cubeVelocityY_ = -fabsf(cubeVelocityY_) * kThrowBounceDamping;
-  } else if (cubeOffsetY_ < -kThrowBounds) {
-    cubeOffsetY_ = -kThrowBounds;
-    cubeVelocityY_ = fabsf(cubeVelocityY_) * kThrowBounceDamping;
+    const float normalVelocity = cubeVelocityX_ * normalX + cubeVelocityY_ * normalY;
+    if (normalVelocity > 0.0f) {
+      cubeVelocityX_ -= (1.0f + kThrowBounceDamping) * normalVelocity * normalX;
+      cubeVelocityY_ -= (1.0f + kThrowBounceDamping) * normalVelocity * normalY;
+    }
   }
 
   cubeVelocityX_ *= kThrowVelocityDamping;
@@ -255,11 +264,11 @@ void AppController::startCubeThrow(
   cubeThrown_ = true;
   lastCubeThrowStartMs_ = now;
   lastCubeThrowUpdateMs_ = now;
-  cubeVelocityX_ = clampFloat(static_cast<float>(accelDeltaX) * kThrowVelocityScale, -430.0f, 430.0f);
-  cubeVelocityY_ = clampFloat(static_cast<float>(accelDeltaY) * kThrowVelocityScale, -430.0f, 430.0f);
-  cubeSpinRollVelocity_ = clampFloat(static_cast<float>(accelDeltaY) * kThrowSpinScale, -420.0f, 420.0f);
-  cubeSpinPitchVelocity_ = clampFloat(static_cast<float>(-accelDeltaX) * kThrowSpinScale, -420.0f, 420.0f);
-  cubeSpinYawVelocity_ = clampFloat(static_cast<float>(accelDeltaZ) * kThrowSpinScale, -420.0f, 420.0f);
+  cubeVelocityX_ = clampFloat(static_cast<float>(accelDeltaX) * kThrowVelocityScale, -560.0f, 560.0f);
+  cubeVelocityY_ = clampFloat(static_cast<float>(accelDeltaY) * kThrowVelocityScale, -560.0f, 560.0f);
+  cubeSpinRollVelocity_ = clampFloat(static_cast<float>(accelDeltaY) * kThrowSpinScale, -520.0f, 520.0f);
+  cubeSpinPitchVelocity_ = clampFloat(static_cast<float>(-accelDeltaX) * kThrowSpinScale, -520.0f, 520.0f);
+  cubeSpinYawVelocity_ = clampFloat(static_cast<float>(accelDeltaZ) * kThrowSpinScale, -520.0f, 520.0f);
 
   Serial.print("Cube thrown motion ");
   Serial.print(labs(accelDeltaX) + labs(accelDeltaY) + labs(accelDeltaZ));
@@ -281,7 +290,7 @@ void AppController::applyCubeMotion(HomeScreenModel &model, const ImuPose &pose)
   model.cubeYawDeg = relativeDegrees(pose.yawDeg, cubeYawZeroDeg_) + cubeSpinYawDeg_;
   model.cubeOffsetX = cubeOffsetX_;
   model.cubeOffsetY = cubeOffsetY_;
-  model.cubeScale = cubeThrown_ ? 22.0f : 32.0f;
+  model.cubeScale = cubeThrown_ ? 18.0f : 32.0f;
 }
 
 void AppController::centerCube() {
