@@ -11,5 +11,5 @@ static constexpr int IMU_SDA = 8;
 static constexpr int IMU_SCL = 7;
 static constexpr int IMU_INT = 6;
 
-static constexpr int FSR_AO = 1;
+static constexpr int BUTTON = 1;
 }

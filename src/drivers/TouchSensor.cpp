@@ -6,8 +6,7 @@
 
 void TouchSensor::begin(const DeviceConfig &config) {
   config_ = config;
-  pinMode(Pins::FSR_AO, INPUT);
-  analogReadResolution(12);
+  pinMode(Pins::BUTTON, INPUT_PULLUP);
 }
 
 TouchEvent TouchSensor::update(uint32_t now) {
@@ -19,11 +18,12 @@ TouchEvent TouchSensor::update(uint32_t now) {
   }
 
   lastSampleMs_ = now;
-  lastValue_ = analogRead(Pins::FSR_AO);
+  const bool pressedNow = digitalRead(Pins::BUTTON) == LOW;
+  lastValue_ = pressedNow ? 0 : 1;
   event.sampled = true;
-  event.analogValue = lastValue_;
+  event.inputValue = lastValue_;
 
-  if (lastValue_ <= config_.touchPressThreshold) {
+  if (pressedNow) {
     if (!pressInProgress_) {
       pressInProgress_ = true;
       longPressTriggered_ = false;
@@ -38,7 +38,7 @@ TouchEvent TouchSensor::update(uint32_t now) {
     return event;
   }
 
-  if (pressInProgress_ && lastValue_ >= config_.touchIdleThreshold) {
+  if (pressInProgress_) {
     pressInProgress_ = false;
     const bool wasLongPress = longPressTriggered_;
     longPressTriggered_ = false;

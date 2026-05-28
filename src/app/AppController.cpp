@@ -27,7 +27,7 @@ void AppController::begin() {
   screen_.renderBoot(bootModel);
   delay(500);
 
-  Serial.println("FSR402 test start");
+  Serial.println("Button input start");
   showText(0);
   lastTouchMs_ = millis();
 }
@@ -45,8 +45,8 @@ void AppController::loop() {
     return;
   }
 
-  Serial.print("AO = ");
-  Serial.println(event.analogValue);
+  Serial.print("Button = ");
+  Serial.println(event.pressed ? "down" : "up");
 
   if (event.pressed) {
     lastTouchMs_ = now;
@@ -95,7 +95,7 @@ void AppController::renderHomeText(const char *text, const char *hintText) {
 void AppController::renderStatus() {
   const ImuPose &pose = imu_.pose();
   StatusScreenModel model;
-  model.touchAnalog = touch_.lastValue();
+  model.buttonPressed = touch_.isPressed();
   model.wifiRssi = 0;
   model.localBatteryPercent = 92;
   model.peerBatteryPercent = 79;

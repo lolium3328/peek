@@ -26,7 +26,7 @@ struct BootScreenModel {
 };
 
 struct StatusScreenModel {
-  uint16_t touchAnalog = 0;
+  bool buttonPressed = false;
   int8_t wifiRssi = 0;
   uint8_t localBatteryPercent = 92;
   uint8_t peerBatteryPercent = 79;

@@ -68,7 +68,7 @@ void ScreenRenderer::renderHome(const HomeScreenModel &model) {
 }
 
 void ScreenRenderer::renderStatus(const StatusScreenModel &model) {
-  char touchText[20];
+  char buttonText[20];
   char rssiText[20];
   char imuText[20];
   char accelText[20];
@@ -76,7 +76,7 @@ void ScreenRenderer::renderStatus(const StatusScreenModel &model) {
   char localBatteryText[20];
   char peerBatteryText[20];
 
-  snprintf(touchText, sizeof(touchText), "touch %u", model.touchAnalog);
+  snprintf(buttonText, sizeof(buttonText), "button %s", model.buttonPressed ? "down" : "up");
   snprintf(rssiText, sizeof(rssiText), "rssi %d", model.wifiRssi);
   if (model.imuReady) {
     snprintf(imuText, sizeof(imuText), "imu ok 0x%02X", model.imuAddress);
@@ -91,7 +91,7 @@ void ScreenRenderer::renderStatus(const StatusScreenModel &model) {
   display_.clear(kBlack);
   display_.drawBatteryBars(model.localBatteryPercent, model.peerBatteryPercent);
   display_.drawTextCentered("status", 48, DisplayTextStyle::Small, kBlue);
-  display_.drawTextCentered(touchText, 76, DisplayTextStyle::Small, kWhite);
+  display_.drawTextCentered(buttonText, 76, DisplayTextStyle::Small, kWhite);
   display_.drawTextCentered(imuText, 99, DisplayTextStyle::Small, stateColor(model.imuReady));
   display_.drawTextCentered(accelText, 122, DisplayTextStyle::Small, kWhite);
   display_.drawTextCentered(poseText, 145, DisplayTextStyle::Small, kWhite);

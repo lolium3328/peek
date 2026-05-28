@@ -12,6 +12,6 @@ struct TouchEvent {
   TouchEventType type = TouchEventType::None;
   bool sampled = false;
   bool pressed = false;
-  int analogValue = 0;
+  int inputValue = 1;
   uint32_t at = 0;
 };
