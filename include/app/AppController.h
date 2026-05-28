@@ -53,6 +53,7 @@ private:
   uint32_t lastCubeThrowStartMs_ = 0;
   uint32_t lastCubeThrowLogMs_ = 0;
   uint32_t lastCubeScaleUpdateMs_ = 0;
+  uint32_t cubeScaleRecoverStartMs_ = 0;
   float cubeOffsetX_ = 0.0f;
   float cubeOffsetY_ = 0.0f;
   float cubeRenderScale_ = 32.0f;
