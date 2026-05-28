@@ -11,6 +11,8 @@ constexpr uint32_t kThrowMinSettleMs = 1400;
 constexpr int32_t kThrowAccelDeltaThreshold = 7200;
 constexpr float kThrowVelocityScale = 0.040f;
 constexpr float kThrowSpinScale = 0.026f;
+constexpr float kThrowZProjection = 0.42f;
+constexpr float kThrowMinLaunchVelocity = 190.0f;
 constexpr float kThrowCircleRadius = 84.0f;
 constexpr float kThrowSpring = 3.6f;
 constexpr float kThrowVelocityDamping = 0.94f;
@@ -264,14 +266,44 @@ void AppController::startCubeThrow(
   cubeThrown_ = true;
   lastCubeThrowStartMs_ = now;
   lastCubeThrowUpdateMs_ = now;
-  cubeVelocityX_ = clampFloat(static_cast<float>(accelDeltaX) * kThrowVelocityScale, -560.0f, 560.0f);
-  cubeVelocityY_ = clampFloat(static_cast<float>(accelDeltaY) * kThrowVelocityScale, -560.0f, 560.0f);
+
+  float launchX = static_cast<float>(accelDeltaX)
+                  + static_cast<float>(accelDeltaZ) * kThrowZProjection;
+  float launchY = static_cast<float>(accelDeltaY)
+                  - static_cast<float>(accelDeltaZ) * kThrowZProjection;
+  cubeVelocityX_ = clampFloat(launchX * kThrowVelocityScale, -560.0f, 560.0f);
+  cubeVelocityY_ = clampFloat(launchY * kThrowVelocityScale, -560.0f, 560.0f);
+
+  const float launchSpeed = sqrtf(cubeVelocityX_ * cubeVelocityX_ + cubeVelocityY_ * cubeVelocityY_);
+  if (launchSpeed < kThrowMinLaunchVelocity) {
+    const float motion = static_cast<float>(labs(accelDeltaX) + labs(accelDeltaY) + labs(accelDeltaZ));
+    const float fallbackSpeed = clampFloat(motion * kThrowVelocityScale * 0.75f,
+                                           kThrowMinLaunchVelocity,
+                                           560.0f);
+    float directionX = launchX;
+    float directionY = launchY;
+    float directionLength = sqrtf(directionX * directionX + directionY * directionY);
+    if (directionLength < 1.0f) {
+      directionX = accelDeltaZ >= 0 ? 1.0f : -1.0f;
+      directionY = -0.75f;
+      directionLength = sqrtf(directionX * directionX + directionY * directionY);
+    }
+    cubeVelocityX_ = directionX / directionLength * fallbackSpeed;
+    cubeVelocityY_ = directionY / directionLength * fallbackSpeed;
+  }
+
   cubeSpinRollVelocity_ = clampFloat(static_cast<float>(accelDeltaY) * kThrowSpinScale, -520.0f, 520.0f);
   cubeSpinPitchVelocity_ = clampFloat(static_cast<float>(-accelDeltaX) * kThrowSpinScale, -520.0f, 520.0f);
   cubeSpinYawVelocity_ = clampFloat(static_cast<float>(accelDeltaZ) * kThrowSpinScale, -520.0f, 520.0f);
 
   Serial.print("Cube thrown motion ");
   Serial.print(labs(accelDeltaX) + labs(accelDeltaY) + labs(accelDeltaZ));
+  Serial.print(" delta ");
+  Serial.print(accelDeltaX);
+  Serial.print(",");
+  Serial.print(accelDeltaY);
+  Serial.print(",");
+  Serial.print(accelDeltaZ);
   Serial.print(" velocity ");
   Serial.print(cubeVelocityX_);
   Serial.print(",");
