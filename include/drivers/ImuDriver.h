@@ -13,6 +13,14 @@ struct ImuSample {
   bool valid = false;
 };
 
+struct ImuPose {
+  float rollDeg = 0.0f;
+  float pitchDeg = 0.0f;
+  float yawDeg = 0.0f;
+  bool valid = false;
+  bool calibrated = false;
+};
+
 class ImuDriver {
 public:
   bool begin();
@@ -22,8 +30,13 @@ public:
   uint8_t address() const;
   uint8_t whoAmI() const;
   const ImuSample &lastSample() const;
+  const ImuPose &pose() const;
 
 private:
+  bool configureDevice();
+  bool calibrateGyroBias();
+  void resetPose();
+  void updatePose(uint32_t now);
   void scanBus();
   bool probeAddress(uint8_t address);
   bool writeRegister(uint8_t reg, uint8_t value);
@@ -37,5 +50,10 @@ private:
   uint8_t whoAmI_ = 0;
   uint32_t lastSampleMs_ = 0;
   uint32_t lastLogMs_ = 0;
+  uint32_t lastPoseUpdateMs_ = 0;
+  float gyroBiasX_ = 0.0f;
+  float gyroBiasY_ = 0.0f;
+  float gyroBiasZ_ = 0.0f;
   ImuSample lastSample_;
+  ImuPose pose_;
 };

@@ -2,6 +2,10 @@
 
 #include <Arduino.h>
 
+namespace {
+constexpr uint32_t kHomeFrameIntervalMs = 75;
+}
+
 AppController::AppController() : screen_(display_) {}
 
 void AppController::begin() {
@@ -32,6 +36,10 @@ void AppController::loop() {
   const uint32_t now = millis();
   imu_.update(now);
 
+  if (!statusVisible_ && (now - lastHomeRenderMs_ >= kHomeFrameIntervalMs)) {
+    renderHomeText(pet_.currentText(), pet_.isSleeping() ? "sleeping" : "tap / hold");
+  }
+
   const TouchEvent event = touch_.update(now);
   if (!event.sampled) {
     return;
@@ -60,12 +68,14 @@ void AppController::loop() {
 
 void AppController::showText(size_t index) {
   pet_.showText(index);
+  statusVisible_ = false;
   renderHomeText(pet_.currentText(), pet_.isSleeping() ? "sleeping" : "tap / hold");
 }
 
 void AppController::renderHomeText(const char *text, const char *hintText) {
+  const ImuPose &pose = imu_.pose();
   HomeScreenModel model;
-  model.primaryText = text;
+  model.primaryText = pose.valid ? text : "imu?";
   model.hintText = hintText;
   model.localWeather = "--";
   model.peerWeather = "--";
@@ -74,10 +84,16 @@ void AppController::renderHomeText(const char *text, const char *hintText) {
   model.wifiConnected = false;
   model.backendConnected = false;
   model.poseAlert = false;
+  model.cubeVisible = pose.valid;
+  model.cubeRollDeg = pose.rollDeg;
+  model.cubePitchDeg = pose.pitchDeg;
+  model.cubeYawDeg = pose.yawDeg;
   screen_.renderHome(model);
+  lastHomeRenderMs_ = millis();
 }
 
 void AppController::renderStatus() {
+  const ImuPose &pose = imu_.pose();
   StatusScreenModel model;
   model.touchAnalog = touch_.lastValue();
   model.wifiRssi = 0;
@@ -87,10 +103,13 @@ void AppController::renderStatus() {
   model.imuReady = imu_.isReady();
   model.imuAddress = imu_.address();
   model.imuAccelZ = imu_.lastSample().accelZ;
+  model.imuRollDeg = pose.rollDeg;
+  model.imuPitchDeg = pose.pitchDeg;
   screen_.renderStatus(model);
 }
 
 void AppController::handleCompletedClick() {
+  statusVisible_ = false;
   pet_.advanceAfterClick();
   renderHomeText(pet_.currentText(), "short press");
 
@@ -99,6 +118,7 @@ void AppController::handleCompletedClick() {
 }
 
 void AppController::handleLongPress() {
+  statusVisible_ = true;
   pet_.wakeForLongPress();
   renderStatus();
 

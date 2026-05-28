@@ -1,6 +1,7 @@
 #include "ui/ScreenRenderer.h"
 
 #include <Arduino.h>
+#include <math.h>
 #include <stdio.h>
 
 namespace {
@@ -14,6 +15,14 @@ constexpr uint16_t kBlue = 0x3D7F;
 constexpr uint16_t kAmber = 0xFDC0;
 constexpr uint16_t kRed = 0xF9C6;
 constexpr int16_t kScreenCenter = 120;
+constexpr int16_t kCubeCenterY = 117;
+constexpr float kCubeScale = 42.0f;
+
+struct CubePoint {
+  int16_t x = 0;
+  int16_t y = 0;
+  float z = 0.0f;
+};
 
 uint16_t stateColor(bool active) {
   return active ? kGreen : kMuted;
@@ -50,7 +59,11 @@ void ScreenRenderer::renderHome(const HomeScreenModel &model) {
     display_.drawCircle(kScreenCenter, kScreenCenter, 72, kAmber);
   }
 
-  display_.drawTextCentered(model.primaryText, 122, DisplayTextStyle::Primary, kWhite);
+  if (model.cubeVisible) {
+    drawPetCube(model);
+  } else {
+    display_.drawTextCentered(model.primaryText, 122, DisplayTextStyle::Primary, kWhite);
+  }
   drawBottomHint(model.hintText);
 }
 
@@ -59,6 +72,7 @@ void ScreenRenderer::renderStatus(const StatusScreenModel &model) {
   char rssiText[20];
   char imuText[20];
   char accelText[20];
+  char poseText[24];
   char localBatteryText[20];
   char peerBatteryText[20];
 
@@ -70,6 +84,7 @@ void ScreenRenderer::renderStatus(const StatusScreenModel &model) {
     snprintf(imuText, sizeof(imuText), "imu missing");
   }
   snprintf(accelText, sizeof(accelText), "az %d", model.imuAccelZ);
+  snprintf(poseText, sizeof(poseText), "rp %.0f %.0f", model.imuRollDeg, model.imuPitchDeg);
   snprintf(localBatteryText, sizeof(localBatteryText), "A %u%%", model.localBatteryPercent);
   snprintf(peerBatteryText, sizeof(peerBatteryText), "B %u%%", model.peerBatteryPercent);
 
@@ -79,16 +94,71 @@ void ScreenRenderer::renderStatus(const StatusScreenModel &model) {
   display_.drawTextCentered(touchText, 76, DisplayTextStyle::Small, kWhite);
   display_.drawTextCentered(imuText, 99, DisplayTextStyle::Small, stateColor(model.imuReady));
   display_.drawTextCentered(accelText, 122, DisplayTextStyle::Small, kWhite);
-  display_.drawTextCentered(rssiText, 145, DisplayTextStyle::Small, kWhite);
-  display_.drawTextCentered(localBatteryText, 168, DisplayTextStyle::Small, batteryColor(model.localBatteryPercent));
-  display_.drawTextCentered(peerBatteryText, 191, DisplayTextStyle::Small, batteryColor(model.peerBatteryPercent));
-  drawStatusPill(78, 205, model.backendConnected ? "backend ok" : "backend off", stateColor(model.backendConnected));
+  display_.drawTextCentered(poseText, 145, DisplayTextStyle::Small, kWhite);
+  display_.drawTextCentered(rssiText, 161, DisplayTextStyle::Small, kWhite);
+  display_.drawTextCentered(localBatteryText, 184, DisplayTextStyle::Small, batteryColor(model.localBatteryPercent));
+  display_.drawTextCentered(peerBatteryText, 199, DisplayTextStyle::Small, batteryColor(model.peerBatteryPercent));
+  drawStatusPill(78, 211, model.backendConnected ? "backend ok" : "backend off", stateColor(model.backendConnected));
 }
 
 void ScreenRenderer::drawTopStatus(const HomeScreenModel &model) {
   drawWeatherChip(41, model.localLabel, model.localWeather);
   drawWeatherChip(151, model.peerLabel, model.peerWeather);
   drawConnectionDots(model.wifiConnected, model.backendConnected);
+}
+
+void ScreenRenderer::drawPetCube(const HomeScreenModel &model) {
+  static constexpr int8_t vertices[8][3] = {
+      {-1, -1, -1},
+      {1, -1, -1},
+      {1, 1, -1},
+      {-1, 1, -1},
+      {-1, -1, 1},
+      {1, -1, 1},
+      {1, 1, 1},
+      {-1, 1, 1},
+  };
+  static constexpr uint8_t edges[12][2] = {
+      {0, 1}, {1, 2}, {2, 3}, {3, 0},
+      {4, 5}, {5, 6}, {6, 7}, {7, 4},
+      {0, 4}, {1, 5}, {2, 6}, {3, 7},
+  };
+
+  const float roll = model.cubeRollDeg * DEG_TO_RAD;
+  const float pitch = model.cubePitchDeg * DEG_TO_RAD;
+  const float yaw = model.cubeYawDeg * DEG_TO_RAD;
+  const float sr = sinf(roll);
+  const float cr = cosf(roll);
+  const float sp = sinf(pitch);
+  const float cp = cosf(pitch);
+  const float sy = sinf(yaw);
+  const float cy = cosf(yaw);
+
+  CubePoint points[8];
+  for (uint8_t index = 0; index < 8; ++index) {
+    const float x = static_cast<float>(vertices[index][0]);
+    const float y = static_cast<float>(vertices[index][1]);
+    const float z = static_cast<float>(vertices[index][2]);
+
+    const float yRoll = y * cr - z * sr;
+    const float zRoll = y * sr + z * cr;
+    const float xPitch = x * cp + zRoll * sp;
+    const float zPitch = -x * sp + zRoll * cp;
+    const float xYaw = xPitch * cy - yRoll * sy;
+    const float yYaw = xPitch * sy + yRoll * cy;
+    const float depth = 1.0f / (1.0f + zPitch * 0.25f);
+
+    points[index].x = kScreenCenter + static_cast<int16_t>(roundf(xYaw * kCubeScale * depth));
+    points[index].y = kCubeCenterY + static_cast<int16_t>(roundf(yYaw * kCubeScale * depth));
+    points[index].z = zPitch;
+  }
+
+  for (uint8_t index = 0; index < 12; ++index) {
+    const CubePoint &a = points[edges[index][0]];
+    const CubePoint &b = points[edges[index][1]];
+    const uint16_t color = (a.z + b.z) > 0.0f ? kGreen : kMuted;
+    display_.drawLine(a.x, a.y, b.x, b.y, color);
+  }
 }
 
 void ScreenRenderer::drawWeatherChip(int16_t x, const char *label, const char *weather) {

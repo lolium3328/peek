@@ -13,6 +13,7 @@ public:
 
 private:
   void drawTopStatus(const HomeScreenModel &model);
+  void drawPetCube(const HomeScreenModel &model);
   void drawWeatherChip(int16_t x, const char *label, const char *weather);
   void drawConnectionDots(bool wifiConnected, bool backendConnected);
   void drawBottomHint(const char *hintText);

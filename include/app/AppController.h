@@ -32,4 +32,6 @@ private:
   ImuDriver imu_;
   PetState pet_;
   uint32_t lastTouchMs_ = 0;
+  uint32_t lastHomeRenderMs_ = 0;
+  bool statusVisible_ = false;
 };

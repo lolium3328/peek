@@ -14,6 +14,10 @@ struct HomeScreenModel {
   bool wifiConnected = false;
   bool backendConnected = false;
   bool poseAlert = false;
+  bool cubeVisible = false;
+  float cubeRollDeg = 0.0f;
+  float cubePitchDeg = 0.0f;
+  float cubeYawDeg = 0.0f;
 };
 
 struct BootScreenModel {
@@ -30,4 +34,6 @@ struct StatusScreenModel {
   bool imuReady = false;
   uint8_t imuAddress = 0;
   int16_t imuAccelZ = 0;
+  float imuRollDeg = 0.0f;
+  float imuPitchDeg = 0.0f;
 };
