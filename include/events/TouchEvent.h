@@ -5,7 +5,8 @@
 enum class TouchEventType {
   None,
   ShortPress,
-  LongPress
+  LongPress,
+  ExtraLongPress
 };
 
 struct TouchEvent {

@@ -17,6 +17,7 @@ private:
   DeviceConfig config_ = defaultDeviceConfig();
   bool pressInProgress_ = false;
   bool longPressTriggered_ = false;
+  bool extraLongPressTriggered_ = false;
   uint32_t lastSampleMs_ = 0;
   uint32_t pressStartMs_ = 0;
   int lastValue_ = 0;

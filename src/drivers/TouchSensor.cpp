@@ -27,11 +27,15 @@ TouchEvent TouchSensor::update(uint32_t now) {
     if (!pressInProgress_) {
       pressInProgress_ = true;
       longPressTriggered_ = false;
+      extraLongPressTriggered_ = false;
       pressStartMs_ = now;
     }
 
     event.pressed = true;
-    if (!longPressTriggered_ && (now - pressStartMs_ >= config_.longPressMs)) {
+    if (!extraLongPressTriggered_ && (now - pressStartMs_ >= config_.extraLongPressMs)) {
+      extraLongPressTriggered_ = true;
+      event.type = TouchEventType::ExtraLongPress;
+    } else if (!longPressTriggered_ && (now - pressStartMs_ >= config_.longPressMs)) {
       longPressTriggered_ = true;
       event.type = TouchEventType::LongPress;
     }
@@ -40,8 +44,9 @@ TouchEvent TouchSensor::update(uint32_t now) {
 
   if (pressInProgress_) {
     pressInProgress_ = false;
-    const bool wasLongPress = longPressTriggered_;
+    const bool wasLongPress = longPressTriggered_ || extraLongPressTriggered_;
     longPressTriggered_ = false;
+    extraLongPressTriggered_ = false;
 
     if (!wasLongPress) {
       event.type = TouchEventType::ShortPress;

@@ -1,6 +1,7 @@
 #include "app/AppController.h"
 
 #include <Arduino.h>
+#include <Preferences.h>
 #include <math.h>
 #include <stdlib.h>
 
@@ -32,6 +33,11 @@ constexpr float kThrowVelocityDamping = 0.94f;
 constexpr float kThrowBounceDamping = 0.72f;
 constexpr float kThrowSpinSpring = 3.8f;
 constexpr float kThrowSpinDamping = 0.94f;
+constexpr const char *kPrefsNamespace = "peek";
+constexpr const char *kPrefsScreenCalibratedKey = "screenCal";
+constexpr const char *kPrefsScreenRollKey = "screenRoll";
+constexpr const char *kPrefsScreenPitchKey = "screenPitch";
+constexpr const char *kPrefsScreenYawKey = "screenYaw";
 
 float relativeDegrees(float value, float zero) {
   float degrees = value - zero;
@@ -88,6 +94,7 @@ void AppController::begin() {
 
   touch_.begin(config_);
   const bool imuReady = imu_.begin();
+  loadScreenCalibration();
 
   BootScreenModel bootModel;
   bootModel.title = "Peek";
@@ -123,7 +130,10 @@ void AppController::loop() {
     lastTouchMs_ = now;
   }
 
-  if (event.type == TouchEventType::LongPress) {
+  if (event.type == TouchEventType::ExtraLongPress) {
+    lastTouchMs_ = now;
+    handleExtraLongPress();
+  } else if (event.type == TouchEventType::LongPress) {
     lastTouchMs_ = now;
     handleLongPress();
   } else if (event.type == TouchEventType::ShortPress) {
@@ -486,6 +496,79 @@ void AppController::applyCubeMotion(HomeScreenModel &model, const ImuPose &pose)
   model.cubeScale = cubeRenderScale_;
 }
 
+void AppController::loadScreenCalibration() {
+  Preferences prefs;
+  if (!prefs.begin(kPrefsNamespace, true)) {
+    Serial.println("Screen calibration load failed: prefs open");
+    return;
+  }
+
+  const bool calibrated = prefs.getBool(kPrefsScreenCalibratedKey, false);
+  if (calibrated) {
+    cubeRollZeroDeg_ = prefs.getFloat(kPrefsScreenRollKey, 0.0f);
+    cubePitchZeroDeg_ = prefs.getFloat(kPrefsScreenPitchKey, 0.0f);
+    cubeYawZeroDeg_ = prefs.getFloat(kPrefsScreenYawKey, 0.0f);
+  }
+  prefs.end();
+
+  if (!calibrated) {
+    Serial.println("Screen calibration: none saved");
+    return;
+  }
+
+  Serial.print("Screen calibration loaded ");
+  Serial.print(cubeRollZeroDeg_);
+  Serial.print(",");
+  Serial.print(cubePitchZeroDeg_);
+  Serial.print(",");
+  Serial.println(cubeYawZeroDeg_);
+}
+
+bool AppController::saveScreenCalibration() {
+  const ImuPose &pose = imu_.pose();
+  if (!pose.valid) {
+    Serial.println("Screen calibration save skipped: imu pose invalid");
+    return false;
+  }
+
+  cubeRollZeroDeg_ = pose.rollDeg;
+  cubePitchZeroDeg_ = pose.pitchDeg;
+  cubeYawZeroDeg_ = pose.yawDeg;
+  cubeThrown_ = false;
+  cubeScaleRecovering_ = false;
+  cubeScaleRecoverStartMs_ = 0;
+  cubeOffsetX_ = 0.0f;
+  cubeOffsetY_ = 0.0f;
+  cubeVelocityX_ = 0.0f;
+  cubeVelocityY_ = 0.0f;
+  cubeSpinRollDeg_ = 0.0f;
+  cubeSpinPitchDeg_ = 0.0f;
+  cubeSpinYawDeg_ = 0.0f;
+  cubeSpinRollVelocity_ = 0.0f;
+  cubeSpinPitchVelocity_ = 0.0f;
+  cubeSpinYawVelocity_ = 0.0f;
+  lastCubeThrowLogMs_ = 0;
+
+  Preferences prefs;
+  if (!prefs.begin(kPrefsNamespace, false)) {
+    Serial.println("Screen calibration save failed: prefs open");
+    return false;
+  }
+  prefs.putFloat(kPrefsScreenRollKey, cubeRollZeroDeg_);
+  prefs.putFloat(kPrefsScreenPitchKey, cubePitchZeroDeg_);
+  prefs.putFloat(kPrefsScreenYawKey, cubeYawZeroDeg_);
+  prefs.putBool(kPrefsScreenCalibratedKey, true);
+  prefs.end();
+
+  Serial.print("Screen calibration saved ");
+  Serial.print(cubeRollZeroDeg_);
+  Serial.print(",");
+  Serial.print(cubePitchZeroDeg_);
+  Serial.print(",");
+  Serial.println(cubeYawZeroDeg_);
+  return true;
+}
+
 void AppController::centerCube() {
   const ImuPose &pose = imu_.pose();
   if (!pose.valid) {
@@ -532,4 +615,13 @@ void AppController::handleLongPress() {
   renderStatus();
 
   Serial.println("Long press -> status");
+}
+
+void AppController::handleExtraLongPress() {
+  statusVisible_ = false;
+  const bool saved = saveScreenCalibration();
+  renderHomeText(pet_.currentText(), saved ? "cal saved" : "cal failed");
+
+  Serial.println(saved ? "Extra long press -> save calibration"
+                       : "Extra long press -> calibration failed");
 }

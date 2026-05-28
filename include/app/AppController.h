@@ -30,9 +30,12 @@ private:
   void detectCubeThrow(uint32_t now);
   void startCubeThrow(uint32_t now, int32_t accelDeltaX, int32_t accelDeltaY, int32_t accelDeltaZ);
   void applyCubeMotion(HomeScreenModel &model, const ImuPose &pose) const;
+  void loadScreenCalibration();
+  bool saveScreenCalibration();
   void centerCube();
   void handleCompletedClick();
   void handleLongPress();
+  void handleExtraLongPress();
 
   DeviceConfig config_ = defaultDeviceConfig();
   DisplayDriver display_;
