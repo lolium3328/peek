@@ -60,6 +60,7 @@ private:
   float cubeOffsetY_ = 0.0f;
   float cubeRecoverOffsetStartX_ = 0.0f;
   float cubeRecoverOffsetStartY_ = 0.0f;
+  float cubeRecoverWobblePhase_ = 0.0f;
   float cubeRenderScale_ = 32.0f;
   float cubeRecoverScaleStart_ = 32.0f;
   float cubeVelocityX_ = 0.0f;

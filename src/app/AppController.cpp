@@ -18,6 +18,9 @@ constexpr uint32_t kCubeScaleRecoverDurationMs = 2000;
 constexpr float kCubeScaleRecoverOffsetThreshold = 16.0f;
 constexpr float kCubeScaleRecoverVelocityThreshold = 48.0f;
 constexpr float kCubeScaleRecoverSpinThreshold = 38.0f;
+constexpr float kCubeRecoverWobblePixels = 7.0f;
+constexpr float kCubeRecoverWobbleCycles = 2.2f;
+constexpr float kCubeRecoverSpinWobbleDeg = 3.6f;
 constexpr float kThrowVelocityScale = 0.040f;
 constexpr float kThrowSpinScale = 0.026f;
 constexpr float kThrowZProjection = 0.42f;
@@ -28,6 +31,7 @@ constexpr float kThrowVelocityDamping = 0.94f;
 constexpr float kThrowBounceDamping = 0.72f;
 constexpr float kThrowSpinSpring = 3.8f;
 constexpr float kThrowSpinDamping = 0.94f;
+constexpr float kTwoPi = 6.2831853f;
 
 float relativeDegrees(float value, float zero) {
   float degrees = value - zero;
@@ -319,6 +323,8 @@ void AppController::startCubeRecovery(uint32_t now) {
   cubeScaleRecoverStartMs_ = now;
   cubeRecoverOffsetStartX_ = cubeOffsetX_;
   cubeRecoverOffsetStartY_ = cubeOffsetY_;
+  const float offsetDistance = sqrtf(cubeOffsetX_ * cubeOffsetX_ + cubeOffsetY_ * cubeOffsetY_);
+  cubeRecoverWobblePhase_ = offsetDistance > 1.0f ? atan2f(cubeOffsetY_, cubeOffsetX_) : 0.65f;
   cubeRecoverScaleStart_ = cubeRenderScale_;
   cubeRecoverSpinRollStartDeg_ = cubeSpinRollDeg_;
   cubeRecoverSpinPitchStartDeg_ = cubeSpinPitchDeg_;
@@ -335,12 +341,20 @@ void AppController::updateCubeRecovery(uint32_t now) {
   const float linearProgress =
       static_cast<float>(now - cubeScaleRecoverStartMs_) / kCubeScaleRecoverDurationMs;
   const float progress = smoothStep(linearProgress);
+  const float clampedProgress = clampFloat(linearProgress, 0.0f, 1.0f);
+  const float wobbleFade = sinf(clampedProgress * kTwoPi * 0.5f)
+                            * (1.0f - clampedProgress * 0.25f);
+  const float wobbleAngle = cubeRecoverWobblePhase_
+                            + clampedProgress * kCubeRecoverWobbleCycles * kTwoPi;
+  const float wobbleX = cosf(wobbleAngle) * kCubeRecoverWobblePixels * wobbleFade;
+  const float wobbleY = sinf(wobbleAngle) * kCubeRecoverWobblePixels * wobbleFade;
+  const float spinWobble = sinf(wobbleAngle * 1.35f) * kCubeRecoverSpinWobbleDeg * wobbleFade;
 
-  cubeOffsetX_ = lerpFloat(cubeRecoverOffsetStartX_, 0.0f, progress);
-  cubeOffsetY_ = lerpFloat(cubeRecoverOffsetStartY_, 0.0f, progress);
-  cubeSpinRollDeg_ = lerpFloat(cubeRecoverSpinRollStartDeg_, 0.0f, progress);
-  cubeSpinPitchDeg_ = lerpFloat(cubeRecoverSpinPitchStartDeg_, 0.0f, progress);
-  cubeSpinYawDeg_ = lerpFloat(cubeRecoverSpinYawStartDeg_, 0.0f, progress);
+  cubeOffsetX_ = lerpFloat(cubeRecoverOffsetStartX_, 0.0f, progress) + wobbleX;
+  cubeOffsetY_ = lerpFloat(cubeRecoverOffsetStartY_, 0.0f, progress) + wobbleY;
+  cubeSpinRollDeg_ = lerpFloat(cubeRecoverSpinRollStartDeg_, 0.0f, progress) + spinWobble;
+  cubeSpinPitchDeg_ = lerpFloat(cubeRecoverSpinPitchStartDeg_, 0.0f, progress) - spinWobble * 0.65f;
+  cubeSpinYawDeg_ = lerpFloat(cubeRecoverSpinYawStartDeg_, 0.0f, progress) + spinWobble * 0.35f;
 
   if (now - lastCubeThrowLogMs_ >= kThrowLogIntervalMs) {
     lastCubeThrowLogMs_ = now;
@@ -375,6 +389,7 @@ void AppController::updateCubeRecovery(uint32_t now) {
   cubeSpinYawVelocity_ = 0.0f;
   lastCubeThrowLogMs_ = 0;
   cubeScaleRecoverStartMs_ = 0;
+  cubeRecoverWobblePhase_ = 0.0f;
   Serial.println("Cube throw settled");
 }
 
@@ -415,6 +430,7 @@ void AppController::startCubeThrow(
   cubeThrown_ = true;
   cubeScaleRecovering_ = false;
   cubeScaleRecoverStartMs_ = 0;
+  cubeRecoverWobblePhase_ = 0.0f;
   lastCubeThrowStartMs_ = now;
   lastCubeThrowUpdateMs_ = now;
   lastCubeThrowLogMs_ = now;
@@ -490,6 +506,7 @@ void AppController::centerCube() {
   cubeThrown_ = false;
   cubeScaleRecovering_ = false;
   cubeScaleRecoverStartMs_ = 0;
+  cubeRecoverWobblePhase_ = 0.0f;
   cubeOffsetX_ = 0.0f;
   cubeOffsetY_ = 0.0f;
   cubeVelocityX_ = 0.0f;
