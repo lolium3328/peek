@@ -4,7 +4,7 @@
 #include <Arduino_GFX_Library.h>
 
 #include "Pins.h"
-#include "../../front/magicalmond_ogyg820pt7b.h"
+#include "assets/fonts/magicalmond_ogyg820pt7b.h"
 
 DisplayDriver::DisplayDriver()
     : bus_(new Arduino_ESP32SPI(

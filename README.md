@@ -4,9 +4,10 @@ Peek is a firmware-first monorepo for a round-screen ESP32-S3 pet device.
 
 ## Layout
 
-- `platformio.ini`, `src/`, `include/`, `front/`: embedded firmware.
+- `platformio.ini`, `src/`, `include/`: embedded firmware.
+- `include/assets`: firmware assets such as generated fonts.
 - `apps/web`: Bun backend and TypeScript configuration UI.
-- `docs/`: product and protocol notes when needed.
+- `docs/hardware`: hardware datasheets and reference material.
 
 ## Firmware
 
