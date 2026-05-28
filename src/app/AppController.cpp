@@ -5,6 +5,8 @@
 #include <math.h>
 #include <stdlib.h>
 
+#include "Pins.h"
+
 namespace {
 constexpr uint32_t kHomeFrameIntervalMs = 75;
 constexpr uint32_t kThrowCooldownMs = 900;
@@ -85,6 +87,8 @@ AppController::AppController() : screen_(display_) {}
 void AppController::begin() {
   Serial.begin(115200);
 
+  configStore_.begin();
+  config_ = configStore_.load();
   fileSystem_.begin();
   layoutStore_.begin(fileSystem_);
   assetStore_.begin(fileSystem_);
@@ -96,15 +100,25 @@ void AppController::begin() {
     }
   }
 
+  pinMode(Pins::BUTTON, INPUT_PULLUP);
+  const bool forceProvisioning = digitalRead(Pins::BUTTON) == LOW;
+  if (forceProvisioning) {
+    config_.wifiSsid = "";
+    Serial.println("Provisioning forced by boot button");
+  }
+
   touch_.begin(config_);
   const bool imuReady = imu_.begin();
-  network_.begin(config_);
-  backend_.begin(config_, layoutStore_, assetStore_);
+  provisioning_.begin(config_, configStore_);
+  if (!provisioning_.isActive()) {
+    network_.begin(config_);
+    backend_.begin(config_, layoutStore_, assetStore_);
+  }
   loadScreenCalibration();
 
   BootScreenModel bootModel;
   bootModel.title = "Peek";
-  bootModel.message = imuReady ? "imu ok" : "imu missing";
+  bootModel.message = provisioning_.isActive() ? "setup ap" : (imuReady ? "imu ok" : "imu missing");
   screen_.renderBoot(bootModel);
   delay(500);
 
@@ -115,9 +129,14 @@ void AppController::begin() {
 
 void AppController::loop() {
   const uint32_t now = millis();
-  network_.loop(now);
+  provisioning_.loop(now);
+  if (!provisioning_.isActive()) {
+    network_.loop(now);
+  }
   imu_.update(now);
-  backend_.loop(now, network_, imu_.pose(), imu_.isReady());
+  if (!provisioning_.isActive()) {
+    backend_.loop(now, network_, imu_.pose(), imu_.isReady());
+  }
   detectCubeThrow(now);
   updateCubeThrow(now);
   updateCubeScale(now);
@@ -164,14 +183,14 @@ void AppController::showText(size_t index) {
 void AppController::renderHomeText(const char *text, const char *hintText) {
   const ImuPose &pose = imu_.pose();
   HomeScreenModel model;
-  model.primaryText = pose.valid ? text : "imu?";
-  model.hintText = hintText;
+  model.primaryText = provisioning_.isActive() ? "setup" : (pose.valid ? text : "imu?");
+  model.hintText = provisioning_.isActive() ? provisioning_.apSsid().c_str() : hintText;
   model.localWeather = "--";
   model.peerWeather = "--";
   model.localBatteryPercent = 92;
   model.peerBatteryPercent = 79;
   model.wifiConnected = network_.isConnected();
-  model.backendConnected = backend_.isConnected(millis());
+  model.backendConnected = !provisioning_.isActive() && backend_.isConnected(millis());
   model.poseAlert = false;
   applyCubeMotion(model, pose);
   screen_.renderHome(model);
@@ -181,14 +200,16 @@ void AppController::renderHomeText(const char *text, const char *hintText) {
 void AppController::renderHomeFrame() {
   const ImuPose &pose = imu_.pose();
   HomeScreenModel model;
-  model.primaryText = pose.valid ? pet_.currentText() : "imu?";
-  model.hintText = pet_.isSleeping() ? "sleeping" : "tap / hold";
+  model.primaryText = provisioning_.isActive() ? "setup" : (pose.valid ? pet_.currentText() : "imu?");
+  model.hintText = provisioning_.isActive()
+                       ? provisioning_.apSsid().c_str()
+                       : (pet_.isSleeping() ? "sleeping" : "tap / hold");
   model.localWeather = "--";
   model.peerWeather = "--";
   model.localBatteryPercent = 92;
   model.peerBatteryPercent = 79;
   model.wifiConnected = network_.isConnected();
-  model.backendConnected = backend_.isConnected(millis());
+  model.backendConnected = !provisioning_.isActive() && backend_.isConnected(millis());
   applyCubeMotion(model, pose);
   if (cubeThrown_) {
     screen_.renderHome(model);
@@ -205,7 +226,7 @@ void AppController::renderStatus() {
   model.wifiRssi = static_cast<int8_t>(network_.rssi());
   model.localBatteryPercent = 92;
   model.peerBatteryPercent = 79;
-  model.backendConnected = backend_.isConnected(millis());
+  model.backendConnected = !provisioning_.isActive() && backend_.isConnected(millis());
   model.imuReady = imu_.isReady();
   model.imuAddress = imu_.address();
   model.imuAccelZ = imu_.lastSample().accelZ;

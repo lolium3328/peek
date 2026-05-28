@@ -9,7 +9,7 @@ constexpr uint32_t kReconnectIntervalMs = 10000;
 
 void NetworkService::begin(const DeviceConfig &config) {
   config_ = &config;
-  enabled_ = config.wifiSsid != nullptr && config.wifiSsid[0] != '\0';
+  enabled_ = config.wifiSsid.length() > 0;
 
   if (!enabled_) {
     Serial.println("WiFi STA disabled: empty ssid");
@@ -55,5 +55,5 @@ void NetworkService::startConnect(uint32_t now) {
   lastConnectAttemptMs_ = now;
   Serial.print("WiFi connecting to ");
   Serial.println(config_->wifiSsid);
-  WiFi.begin(config_->wifiSsid, config_->wifiPassword);
+  WiFi.begin(config_->wifiSsid.c_str(), config_->wifiPassword.c_str());
 }

@@ -40,3 +40,15 @@ boot with the last known screen setup even when the server is unavailable.
   returned manifest.
 - Firmware stores large editable data in LittleFS and keeps small calibration
   values in NVS/Preferences.
+
+## First Setup
+
+When no Wi-Fi SSID is saved, the firmware starts a setup access point:
+
+- SSID: `Peek-xxxx`
+- Password: `peeksetup`
+- Setup page: `http://192.168.4.1`
+
+Save the Wi-Fi SSID, Wi-Fi password, backend URL, and device identity there.
+Peek writes those values to NVS and restarts into STA mode. Hold the button
+while booting to force setup mode without erasing the saved values.

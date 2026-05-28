@@ -10,8 +10,8 @@ namespace {
 constexpr const char *kFirmwareVersion = "0.1.0";
 constexpr uint32_t kConnectedGraceMs = 15000;
 
-String trimTrailingSlash(const char *value) {
-  String result = value ? value : "";
+String trimTrailingSlash(const String &value) {
+  String result = value;
   result.trim();
   while (result.endsWith("/")) {
     result.remove(result.length() - 1);
@@ -24,7 +24,7 @@ void BackendClient::begin(const DeviceConfig &config, LayoutStore &layoutStore, 
   config_ = &config;
   layoutStore_ = &layoutStore;
   assetStore_ = &assetStore;
-  enabled_ = config.backendUrl != nullptr && config.backendUrl[0] != '\0';
+  enabled_ = config.backendUrl.length() > 0;
 
   if (!enabled_) {
     Serial.println("Backend sync disabled: empty backendUrl");
