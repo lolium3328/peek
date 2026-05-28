@@ -44,6 +44,7 @@ private:
   float cubePitchZeroDeg_ = 0.0f;
   float cubeYawZeroDeg_ = 0.0f;
   bool cubeThrown_ = false;
+  bool cubeScaleRecovering_ = false;
   bool hasMotionBaseline_ = false;
   int16_t previousAccelX_ = 0;
   int16_t previousAccelY_ = 0;

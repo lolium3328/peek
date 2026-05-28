@@ -12,7 +12,9 @@ constexpr uint32_t kThrowLogIntervalMs = 200;
 constexpr int32_t kThrowAccelDeltaThreshold = 7200;
 constexpr float kCubeNormalScale = 32.0f;
 constexpr float kCubeThrownScale = 18.0f;
-constexpr float kCubeScalePixelsPerSecond = 24.0f;
+constexpr float kCubeScaleShrinkPixelsPerSecond = 24.0f;
+constexpr float kCubeScaleGrowPixelsPerSecond = 10.0f;
+constexpr uint32_t kCubeScaleRecoverDelayMs = 650;
 constexpr float kThrowVelocityScale = 0.040f;
 constexpr float kThrowSpinScale = 0.026f;
 constexpr float kThrowZProjection = 0.42f;
@@ -193,10 +195,13 @@ void AppController::updateCubeScale(uint32_t now) {
     dt = static_cast<float>(kHomeFrameIntervalMs) / 1000.0f;
   }
 
-  const float targetScale = cubeThrown_ ? kCubeThrownScale : kCubeNormalScale;
-  cubeRenderScale_ = moveFloatToward(cubeRenderScale_,
-                                     targetScale,
-                                     kCubeScalePixelsPerSecond * dt);
+  const float targetScale = (cubeThrown_ && !cubeScaleRecovering_)
+                                ? kCubeThrownScale
+                                : kCubeNormalScale;
+  const float scaleSpeed = targetScale < cubeRenderScale_
+                               ? kCubeScaleShrinkPixelsPerSecond
+                               : kCubeScaleGrowPixelsPerSecond;
+  cubeRenderScale_ = moveFloatToward(cubeRenderScale_, targetScale, scaleSpeed * dt);
 }
 
 void AppController::updateCubeThrow(uint32_t now) {
@@ -244,6 +249,17 @@ void AppController::updateCubeThrow(uint32_t now) {
   const float velocityDamping = powf(kThrowVelocityDamping, frameScale);
   cubeVelocityX_ *= velocityDamping;
   cubeVelocityY_ *= velocityDamping;
+
+  if (!cubeScaleRecovering_ && now - lastCubeThrowStartMs_ >= kCubeScaleRecoverDelayMs) {
+    const float speed = sqrtf(cubeVelocityX_ * cubeVelocityX_ + cubeVelocityY_ * cubeVelocityY_);
+    const float inwardVelocity = distance > 1.0f
+                                     ? -(cubeOffsetX_ * cubeVelocityX_ + cubeOffsetY_ * cubeVelocityY_) / distance
+                                     : speed;
+    if (distance < kThrowCircleRadius * 0.72f && inwardVelocity > 12.0f) {
+      cubeScaleRecovering_ = true;
+      Serial.println("Cube scale recovering");
+    }
+  }
 
   cubeSpinRollVelocity_ += -cubeSpinRollDeg_ * kThrowSpinSpring * dt;
   cubeSpinPitchVelocity_ += -cubeSpinPitchDeg_ * kThrowSpinSpring * dt;
@@ -333,6 +349,7 @@ void AppController::startCubeThrow(
     int32_t accelDeltaY,
     int32_t accelDeltaZ) {
   cubeThrown_ = true;
+  cubeScaleRecovering_ = false;
   lastCubeThrowStartMs_ = now;
   lastCubeThrowUpdateMs_ = now;
   lastCubeThrowLogMs_ = now;
@@ -406,6 +423,7 @@ void AppController::centerCube() {
   cubePitchZeroDeg_ = pose.pitchDeg;
   cubeYawZeroDeg_ = pose.yawDeg;
   cubeThrown_ = false;
+  cubeScaleRecovering_ = false;
   cubeOffsetX_ = 0.0f;
   cubeOffsetY_ = 0.0f;
   cubeVelocityX_ = 0.0f;
