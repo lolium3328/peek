@@ -23,6 +23,7 @@ private:
   void renderHomeText(const char *text, const char *hintText);
   void renderHomeFrame();
   void renderStatus();
+  void centerCube();
   void handleCompletedClick();
   void handleLongPress();
 
@@ -34,5 +35,8 @@ private:
   PetState pet_;
   uint32_t lastTouchMs_ = 0;
   uint32_t lastHomeRenderMs_ = 0;
+  float cubeRollZeroDeg_ = 0.0f;
+  float cubePitchZeroDeg_ = 0.0f;
+  float cubeYawZeroDeg_ = 0.0f;
   bool statusVisible_ = false;
 };

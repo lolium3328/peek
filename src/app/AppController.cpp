@@ -4,6 +4,17 @@
 
 namespace {
 constexpr uint32_t kHomeFrameIntervalMs = 75;
+
+float relativeDegrees(float value, float zero) {
+  float degrees = value - zero;
+  while (degrees > 180.0f) {
+    degrees -= 360.0f;
+  }
+  while (degrees < -180.0f) {
+    degrees += 360.0f;
+  }
+  return degrees;
+}
 }
 
 AppController::AppController() : screen_(display_) {}
@@ -85,9 +96,9 @@ void AppController::renderHomeText(const char *text, const char *hintText) {
   model.backendConnected = false;
   model.poseAlert = false;
   model.cubeVisible = pose.valid;
-  model.cubeRollDeg = pose.rollDeg;
-  model.cubePitchDeg = pose.pitchDeg;
-  model.cubeYawDeg = pose.yawDeg;
+  model.cubeRollDeg = relativeDegrees(pose.rollDeg, cubeRollZeroDeg_);
+  model.cubePitchDeg = relativeDegrees(pose.pitchDeg, cubePitchZeroDeg_);
+  model.cubeYawDeg = relativeDegrees(pose.yawDeg, cubeYawZeroDeg_);
   screen_.renderHome(model);
   lastHomeRenderMs_ = millis();
 }
@@ -97,9 +108,9 @@ void AppController::renderHomeFrame() {
   HomeScreenModel model;
   model.primaryText = pose.valid ? pet_.currentText() : "imu?";
   model.cubeVisible = pose.valid;
-  model.cubeRollDeg = pose.rollDeg;
-  model.cubePitchDeg = pose.pitchDeg;
-  model.cubeYawDeg = pose.yawDeg;
+  model.cubeRollDeg = relativeDegrees(pose.rollDeg, cubeRollZeroDeg_);
+  model.cubePitchDeg = relativeDegrees(pose.pitchDeg, cubePitchZeroDeg_);
+  model.cubeYawDeg = relativeDegrees(pose.yawDeg, cubeYawZeroDeg_);
   screen_.renderHomeFrame(model);
   lastHomeRenderMs_ = millis();
 }
@@ -120,13 +131,30 @@ void AppController::renderStatus() {
   screen_.renderStatus(model);
 }
 
+void AppController::centerCube() {
+  const ImuPose &pose = imu_.pose();
+  if (!pose.valid) {
+    Serial.println("Cube center skipped: imu pose invalid");
+    return;
+  }
+
+  cubeRollZeroDeg_ = pose.rollDeg;
+  cubePitchZeroDeg_ = pose.pitchDeg;
+  cubeYawZeroDeg_ = pose.yawDeg;
+  Serial.print("Cube centered at ");
+  Serial.print(cubeRollZeroDeg_);
+  Serial.print(",");
+  Serial.print(cubePitchZeroDeg_);
+  Serial.print(",");
+  Serial.println(cubeYawZeroDeg_);
+}
+
 void AppController::handleCompletedClick() {
   statusVisible_ = false;
-  pet_.advanceAfterClick();
-  renderHomeText(pet_.currentText(), "short press");
+  centerCube();
+  renderHomeText(pet_.currentText(), "centered");
 
-  Serial.print("Click -> ");
-  Serial.println(pet_.currentText());
+  Serial.println("Short press -> center cube");
 }
 
 void AppController::handleLongPress() {
