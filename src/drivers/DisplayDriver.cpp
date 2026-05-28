@@ -8,13 +8,14 @@
 
 namespace {
 constexpr int16_t kScreenSize = 240;
-constexpr int16_t kBatteryBarY = 58;
-constexpr int16_t kBatteryBarWidth = 8;
-constexpr int16_t kBatteryBarHeight = 124;
-constexpr int16_t kLeftBatteryBarX = 15;
-constexpr int16_t kRightBatteryBarX = kScreenSize - kLeftBatteryBarX - kBatteryBarWidth;
+constexpr int16_t kScreenCenter = kScreenSize / 2;
+constexpr int16_t kBatteryArcRadius = 109;
+constexpr int16_t kLeftBatteryStartDeg = 142;
+constexpr int16_t kRightBatteryStartDeg = 38;
+constexpr int16_t kBatteryArcSweepDeg = 76;
+constexpr uint8_t kBatteryArcThickness = 4;
+constexpr uint8_t kBatteryTrackThickness = 2;
 constexpr uint16_t kBatteryTrackColor = 0x18E3;
-constexpr uint16_t kBatteryTrackOutline = 0x4208;
 constexpr uint16_t kBatteryHighColor = 0x05F4;
 constexpr uint16_t kBatteryMidColor = 0xFDC0;
 constexpr uint16_t kBatteryLowColor = 0xF9C6;
@@ -77,39 +78,37 @@ void DisplayDriver::setBatteryBars(uint8_t leftPercent, uint8_t rightPercent) {
 }
 
 void DisplayDriver::drawBatteryBars() {
-  drawBatteryBar(kLeftBatteryBarX, leftBatteryPercent_);
-  drawBatteryBar(kRightBatteryBarX, rightBatteryPercent_);
+  drawBatteryArc(true, leftBatteryPercent_);
+  drawBatteryArc(false, rightBatteryPercent_);
 }
 
-void DisplayDriver::drawBatteryBar(int16_t x, uint8_t percent) {
+void DisplayDriver::drawBatteryArc(bool leftSide, uint8_t percent) {
   const uint8_t clampedPercent = clampPercent(percent);
-  const int16_t fillHeight = (kBatteryBarHeight * clampedPercent) / 100;
-  const int16_t fillY = kBatteryBarY + kBatteryBarHeight - fillHeight;
+  const int16_t startDeg = leftSide ? kLeftBatteryStartDeg : kRightBatteryStartDeg;
+  const int16_t sweepDeg = leftSide ? kBatteryArcSweepDeg : -kBatteryArcSweepDeg;
+  const int16_t fillSweepDeg = (sweepDeg * clampedPercent) / 100;
 
-  gfx_->drawRoundRect(
-      x - 2,
-      kBatteryBarY - 2,
-      kBatteryBarWidth + 4,
-      kBatteryBarHeight + 4,
-      6,
-      kBatteryTrackOutline);
-  gfx_->fillRoundRect(
-      x,
-      kBatteryBarY,
-      kBatteryBarWidth,
-      kBatteryBarHeight,
-      4,
-      kBatteryTrackColor);
+  drawArcSegment(startDeg, sweepDeg, kBatteryTrackColor, kBatteryTrackThickness);
 
-  if (fillHeight <= 0) {
+  if (fillSweepDeg == 0) {
     return;
   }
 
-  gfx_->fillRoundRect(
-      x,
-      fillY,
-      kBatteryBarWidth,
-      fillHeight,
-      4,
-      batteryColor(clampedPercent));
+  drawArcSegment(startDeg, fillSweepDeg, batteryColor(clampedPercent), kBatteryArcThickness);
+}
+
+void DisplayDriver::drawArcSegment(
+    int16_t startDeg,
+    int16_t sweepDeg,
+    uint16_t color,
+    uint8_t thickness) {
+  const int16_t step = sweepDeg >= 0 ? 2 : -2;
+  const int16_t endDeg = startDeg + sweepDeg;
+
+  for (int16_t deg = startDeg; sweepDeg >= 0 ? deg <= endDeg : deg >= endDeg; deg += step) {
+    const float radians = deg * DEG_TO_RAD;
+    const int16_t x = kScreenCenter + static_cast<int16_t>(cos(radians) * kBatteryArcRadius);
+    const int16_t y = kScreenCenter + static_cast<int16_t>(sin(radians) * kBatteryArcRadius);
+    gfx_->fillCircle(x, y, thickness, color);
+  }
 }

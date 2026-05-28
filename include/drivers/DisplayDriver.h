@@ -15,7 +15,8 @@ public:
 
 private:
   void drawBatteryBars();
-  void drawBatteryBar(int16_t x, uint8_t percent);
+  void drawBatteryArc(bool leftSide, uint8_t percent);
+  void drawArcSegment(int16_t startDeg, int16_t sweepDeg, uint16_t color, uint8_t thickness);
 
   Arduino_DataBus *bus_;
   Arduino_GFX *gfx_;
