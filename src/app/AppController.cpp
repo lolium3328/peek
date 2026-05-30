@@ -438,7 +438,7 @@ void AppController::updateCubeRecovery(uint32_t now, float dt, float frameScale)
 }
 
 void AppController::detectHeldPetGesture(uint32_t now) {
-  if (statusVisible_ || holdGestureConsumed_ || !touch_.isPressed() || !imu_.lastSample().valid) {
+  if (holdGestureConsumed_ || !touch_.isPressed() || !imu_.lastSample().valid) {
     if (!touch_.isPressed()) {
       resetMotionBaseline();
     }
