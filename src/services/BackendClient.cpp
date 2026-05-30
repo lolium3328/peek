@@ -20,6 +20,66 @@ String trimTrailingSlash(const String &value) {
   }
   return result;
 }
+
+bool writeHttpResponseToFile(HTTPClient &http, int status, const String &localPath, size_t expectedSize) {
+  if (status < 200 || status >= 300) {
+    Serial.print("Asset download http ");
+    Serial.println(status);
+    http.end();
+    return false;
+  }
+
+  const String tempPath = localPath + ".tmp";
+  File file = LittleFS.open(tempPath, "w");
+  if (!file) {
+    Serial.println("Asset download failed: open temp");
+    http.end();
+    return false;
+  }
+
+  WiFiClient *stream = http.getStreamPtr();
+  uint8_t buffer[512];
+  size_t written = 0;
+  while (http.connected()) {
+    const int available = stream->available();
+    if (available <= 0) {
+      if (written >= expectedSize && expectedSize > 0) {
+        break;
+      }
+      delay(1);
+      continue;
+    }
+
+    const int readSize = stream->readBytes(buffer, min(available, static_cast<int>(sizeof(buffer))));
+    if (readSize <= 0) {
+      break;
+    }
+    file.write(buffer, readSize);
+    written += readSize;
+  }
+  file.close();
+  http.end();
+
+  if (expectedSize > 0 && written != expectedSize) {
+    LittleFS.remove(tempPath);
+    Serial.print("Asset download failed: size mismatch ");
+    Serial.print(written);
+    Serial.print("/");
+    Serial.println(expectedSize);
+    return false;
+  }
+
+  LittleFS.remove(localPath);
+  if (!LittleFS.rename(tempPath, localPath)) {
+    LittleFS.remove(tempPath);
+    Serial.println("Asset download failed: rename");
+    return false;
+  }
+
+  Serial.print("Asset downloaded ");
+  Serial.println(localPath);
+  return true;
+}
 } // namespace
 
 void BackendClient::begin(const DeviceConfig &config, LayoutStore &layoutStore, AssetStore &assetStore) {
@@ -78,6 +138,7 @@ void BackendClient::syncNow(
   HTTPClient http;
   int status = -1;
   bool began = false;
+  String body;
 
   if (url.startsWith("https://")) {
     WiFiClientSecure client;
@@ -86,6 +147,9 @@ void BackendClient::syncNow(
     if (began) {
       http.addHeader("Content-Type", "application/json");
       status = http.POST(payload);
+      if (status >= 200 && status < 300) {
+        body = http.getString();
+      }
     }
   } else {
     WiFiClient client;
@@ -93,6 +157,9 @@ void BackendClient::syncNow(
     if (began) {
       http.addHeader("Content-Type", "application/json");
       status = http.POST(payload);
+      if (status >= 200 && status < 300) {
+        body = http.getString();
+      }
     }
   }
 
@@ -109,10 +176,11 @@ void BackendClient::syncNow(
     return;
   }
 
-  const String body = http.getString();
   http.end();
 
   if (!applySyncResponse(body)) {
+    Serial.print("Backend sync body bytes ");
+    Serial.println(body.length());
     Serial.println("Backend sync response ignored");
     return;
   }
@@ -260,67 +328,18 @@ bool BackendClient::downloadAssetFile(const String &url, const String &localPath
     began = http.begin(client, url);
     if (began) {
       status = http.GET();
+      return writeHttpResponseToFile(http, status, localPath, expectedSize);
     }
   } else {
     WiFiClient client;
     began = http.begin(client, url);
     if (began) {
       status = http.GET();
+      return writeHttpResponseToFile(http, status, localPath, expectedSize);
     }
   }
 
-  if (!began || status < 200 || status >= 300) {
-    Serial.print("Asset download http ");
-    Serial.println(status);
-    http.end();
-    return false;
-  }
-
-  const String tempPath = localPath + ".tmp";
-  File file = LittleFS.open(tempPath, "w");
-  if (!file) {
-    Serial.println("Asset download failed: open temp");
-    http.end();
-    return false;
-  }
-
-  WiFiClient *stream = http.getStreamPtr();
-  uint8_t buffer[512];
-  size_t written = 0;
-  while (http.connected()) {
-    const int available = stream->available();
-    if (available <= 0) {
-      if (written >= expectedSize && expectedSize > 0) {
-        break;
-      }
-      delay(1);
-      continue;
-    }
-
-    const int readSize = stream->readBytes(buffer, min(available, static_cast<int>(sizeof(buffer))));
-    if (readSize <= 0) {
-      break;
-    }
-    file.write(buffer, readSize);
-    written += readSize;
-  }
-  file.close();
+  Serial.println("Asset download failed: begin");
   http.end();
-
-  if (expectedSize > 0 && written != expectedSize) {
-    LittleFS.remove(tempPath);
-    Serial.println("Asset download failed: size mismatch");
-    return false;
-  }
-
-  LittleFS.remove(localPath);
-  if (!LittleFS.rename(tempPath, localPath)) {
-    LittleFS.remove(tempPath);
-    Serial.println("Asset download failed: rename");
-    return false;
-  }
-
-  Serial.print("Asset downloaded ");
-  Serial.println(localPath);
-  return true;
+  return false;
 }
