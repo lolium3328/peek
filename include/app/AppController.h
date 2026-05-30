@@ -26,15 +26,17 @@ public:
   void loop();
 
 private:
-  void showText(size_t index);
-  void renderHomeText(const char *text, const char *hintText);
+  void resetPet();
+  void renderHomeText(const char *hintText);
   void renderHomeFrame();
   void renderStatus();
   void updateCubeThrow(uint32_t now);
   void updateCubeScale(uint32_t now);
   void startCubeRecovery(uint32_t now);
   void updateCubeRecovery(uint32_t now, float dt, float frameScale);
-  void detectCubeThrow(uint32_t now);
+  void detectHeldPetGesture(uint32_t now);
+  void resetMotionBaseline();
+  void stopCubeThrow();
   void startCubeThrow(uint32_t now, int32_t accelDeltaX, int32_t accelDeltaY, int32_t accelDeltaZ);
   void applyCubeMotion(HomeScreenModel &model, const ImuPose &pose) const;
   void loadScreenCalibration();
@@ -70,6 +72,7 @@ private:
   int16_t previousAccelZ_ = 0;
   uint32_t lastCubeThrowUpdateMs_ = 0;
   uint32_t lastCubeThrowStartMs_ = 0;
+  uint32_t lastPetGestureMs_ = 0;
   uint32_t lastCubeThrowLogMs_ = 0;
   uint32_t lastCubeScaleUpdateMs_ = 0;
   uint32_t cubeScaleRecoverStartMs_ = 0;
@@ -85,5 +88,6 @@ private:
   float cubeSpinRollVelocity_ = 0.0f;
   float cubeSpinPitchVelocity_ = 0.0f;
   float cubeSpinYawVelocity_ = 0.0f;
+  bool holdGestureConsumed_ = false;
   bool statusVisible_ = false;
 };

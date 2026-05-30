@@ -1,49 +1,36 @@
 #include "app/PetState.h"
 
 namespace {
-const char *kDisplayTexts[] = {
-    "zzz...",
-    "boring",
-    "pet me",
-    "hmm...",
-    "oops",
-    "hehe",
-    "lonely",
-    "sleepy",
-    "love",
-    "again!",
-    "one more",
-    "miss u",
-    "play?",
-    "ok",
-    "yay",
-    "fun",
-    "pet me",
-    "wow"};
+const char *kPetTexts[] = {
+    "",
+    "Pet 2",
+    "Pet 3",
+};
 
-constexpr size_t kDisplayTextCount = sizeof(kDisplayTexts) / sizeof(kDisplayTexts[0]);
-constexpr size_t kFirstActiveTextIndex = 1;
+constexpr size_t kPetCount = sizeof(kPetTexts) / sizeof(kPetTexts[0]);
+constexpr size_t kCubePetIndex = 0;
 } // namespace
 
-void PetState::showText(size_t index) {
-  currentTextIndex_ = index % kDisplayTextCount;
-  sleeping_ = (currentTextIndex_ == 0);
+void PetState::reset() {
+  currentPetIndex_ = kCubePetIndex;
+  sleeping_ = true;
 }
 
-void PetState::advanceAfterClick() {
-  size_t nextIndex = currentTextIndex_ + 1;
-  if (nextIndex >= kDisplayTextCount) {
-    nextIndex = kFirstActiveTextIndex;
-  }
-  showText(nextIndex);
+void PetState::advancePet() {
+  currentPetIndex_ = (currentPetIndex_ + 1) % kPetCount;
+  sleeping_ = false;
 }
 
 void PetState::wakeForLongPress() {
   sleeping_ = false;
 }
 
-const char *PetState::currentText() const {
-  return kDisplayTexts[currentTextIndex_];
+const char *PetState::currentPetText() const {
+  return kPetTexts[currentPetIndex_];
+}
+
+bool PetState::isCubePet() const {
+  return currentPetIndex_ == kCubePetIndex;
 }
 
 bool PetState::isSleeping() const {

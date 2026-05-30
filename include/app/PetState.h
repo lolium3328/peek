@@ -4,14 +4,15 @@
 
 class PetState {
 public:
-  void showText(size_t index);
-  void advanceAfterClick();
+  void reset();
+  void advancePet();
   void wakeForLongPress();
 
-  const char *currentText() const;
+  const char *currentPetText() const;
+  bool isCubePet() const;
   bool isSleeping() const;
 
 private:
-  size_t currentTextIndex_ = 0;
+  size_t currentPetIndex_ = 0;
   bool sleeping_ = true;
 };

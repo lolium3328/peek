@@ -123,7 +123,7 @@ void AppController::begin() {
   delay(500);
 
   Serial.println("Button input start");
-  showText(0);
+  resetPet();
   lastTouchMs_ = millis();
 }
 
@@ -137,7 +137,6 @@ void AppController::loop() {
   if (!provisioning_.isActive()) {
     backend_.loop(now, network_, imu_.pose(), imu_.isReady());
   }
-  detectCubeThrow(now);
   updateCubeThrow(now);
   updateCubeScale(now);
 
@@ -146,44 +145,54 @@ void AppController::loop() {
   }
 
   const TouchEvent event = touch_.update(now);
-  if (!event.sampled) {
-    return;
+  const bool releasedNow = event.sampled && !event.pressed;
+  if (event.sampled) {
+    Serial.print("Button = ");
+    Serial.println(event.pressed ? "down" : "up");
+
+    if (event.pressed) {
+      lastTouchMs_ = now;
+    }
   }
 
-  Serial.print("Button = ");
-  Serial.println(event.pressed ? "down" : "up");
+  detectHeldPetGesture(now);
 
-  if (event.pressed) {
-    lastTouchMs_ = now;
+  if (event.sampled && !holdGestureConsumed_) {
+    if (event.type == TouchEventType::ExtraLongPress) {
+      lastTouchMs_ = now;
+      handleExtraLongPress();
+    } else if (event.type == TouchEventType::LongPress) {
+      lastTouchMs_ = now;
+      handleLongPress();
+    } else if (event.type == TouchEventType::ShortPress) {
+      lastTouchMs_ = now;
+      handleCompletedClick();
+    }
   }
 
-  if (event.type == TouchEventType::ExtraLongPress) {
-    lastTouchMs_ = now;
-    handleExtraLongPress();
-  } else if (event.type == TouchEventType::LongPress) {
-    lastTouchMs_ = now;
-    handleLongPress();
-  } else if (event.type == TouchEventType::ShortPress) {
-    lastTouchMs_ = now;
-    handleCompletedClick();
+  if (releasedNow) {
+    holdGestureConsumed_ = false;
+    resetMotionBaseline();
   }
 
   if (!pet_.isSleeping() && !touch_.isPressed() && (now - lastTouchMs_ >= config_.sleepTimeoutMs)) {
-    showText(0);
-    Serial.println("Sleep timeout -> zzz...");
+    resetPet();
+    Serial.println("Sleep timeout -> cube pet");
   }
 }
 
-void AppController::showText(size_t index) {
-  pet_.showText(index);
+void AppController::resetPet() {
+  pet_.reset();
   statusVisible_ = false;
-  renderHomeText(pet_.currentText(), pet_.isSleeping() ? "sleeping" : "tap / hold");
+  renderHomeText(pet_.isSleeping() ? "sleeping" : "hold + shake");
 }
 
-void AppController::renderHomeText(const char *text, const char *hintText) {
+void AppController::renderHomeText(const char *hintText) {
   const ImuPose &pose = imu_.pose();
   HomeScreenModel model;
-  model.primaryText = provisioning_.isActive() ? "setup" : (pose.valid ? text : "imu?");
+  model.primaryText = provisioning_.isActive()
+                          ? "setup"
+                          : (pet_.isCubePet() ? (pose.valid ? "" : "imu?") : pet_.currentPetText());
   model.hintText = provisioning_.isActive() ? provisioning_.apSsid().c_str() : hintText;
   model.localWeather = "--";
   model.peerWeather = "--";
@@ -200,10 +209,12 @@ void AppController::renderHomeText(const char *text, const char *hintText) {
 void AppController::renderHomeFrame() {
   const ImuPose &pose = imu_.pose();
   HomeScreenModel model;
-  model.primaryText = provisioning_.isActive() ? "setup" : (pose.valid ? pet_.currentText() : "imu?");
+  model.primaryText = provisioning_.isActive()
+                          ? "setup"
+                          : (pet_.isCubePet() ? (pose.valid ? "" : "imu?") : pet_.currentPetText());
   model.hintText = provisioning_.isActive()
                        ? provisioning_.apSsid().c_str()
-                       : (pet_.isSleeping() ? "sleeping" : "tap / hold");
+                       : (touch_.isPressed() ? "gesture" : (pet_.isSleeping() ? "sleeping" : "hold + shake"));
   model.localWeather = "--";
   model.peerWeather = "--";
   model.localBatteryPercent = 92;
@@ -426,8 +437,11 @@ void AppController::updateCubeRecovery(uint32_t now, float dt, float frameScale)
   Serial.println("Cube throw settled");
 }
 
-void AppController::detectCubeThrow(uint32_t now) {
-  if (statusVisible_ || !imu_.lastSample().valid) {
+void AppController::detectHeldPetGesture(uint32_t now) {
+  if (statusVisible_ || holdGestureConsumed_ || !touch_.isPressed() || !imu_.lastSample().valid) {
+    if (!touch_.isPressed()) {
+      resetMotionBaseline();
+    }
     return;
   }
 
@@ -448,11 +462,44 @@ void AppController::detectCubeThrow(uint32_t now) {
   previousAccelZ_ = sample.accelZ;
 
   const int32_t motion = labs(accelDeltaX) + labs(accelDeltaY) + labs(accelDeltaZ);
-  if (motion < kThrowAccelDeltaThreshold || now - lastCubeThrowStartMs_ < kThrowCooldownMs) {
+  if (motion < kThrowAccelDeltaThreshold || now - lastPetGestureMs_ < kThrowCooldownMs) {
     return;
   }
 
-  startCubeThrow(now, accelDeltaX, accelDeltaY, accelDeltaZ);
+  pet_.advancePet();
+  holdGestureConsumed_ = true;
+  statusVisible_ = false;
+  lastTouchMs_ = now;
+  lastPetGestureMs_ = now;
+  stopCubeThrow();
+  renderHomeText("switched");
+
+  Serial.print("Hold shake -> pet ");
+  Serial.print(pet_.isCubePet() ? "cube" : pet_.currentPetText());
+  Serial.print(" motion ");
+  Serial.println(motion);
+}
+
+void AppController::resetMotionBaseline() {
+  hasMotionBaseline_ = false;
+}
+
+void AppController::stopCubeThrow() {
+  cubeThrown_ = false;
+  cubeScaleRecovering_ = false;
+  cubeScaleRecoverStartMs_ = 0;
+  cubeOffsetX_ = 0.0f;
+  cubeOffsetY_ = 0.0f;
+  cubeVelocityX_ = 0.0f;
+  cubeVelocityY_ = 0.0f;
+  cubeSpinRollDeg_ = 0.0f;
+  cubeSpinPitchDeg_ = 0.0f;
+  cubeSpinYawDeg_ = 0.0f;
+  cubeSpinRollVelocity_ = 0.0f;
+  cubeSpinPitchVelocity_ = 0.0f;
+  cubeSpinYawVelocity_ = 0.0f;
+  cubeRenderScale_ = kCubeNormalScale;
+  lastCubeThrowLogMs_ = 0;
 }
 
 void AppController::startCubeThrow(
@@ -511,7 +558,7 @@ void AppController::startCubeThrow(
 }
 
 void AppController::applyCubeMotion(HomeScreenModel &model, const ImuPose &pose) const {
-  model.cubeVisible = pose.valid;
+  model.cubeVisible = pet_.isCubePet() && pose.valid;
   if (!pose.valid) {
     model.cubeScale = cubeRenderScale_;
     return;
@@ -633,7 +680,7 @@ void AppController::centerCube() {
 void AppController::handleCompletedClick() {
   statusVisible_ = false;
   centerCube();
-  renderHomeText(pet_.currentText(), "centered");
+  renderHomeText("centered");
 
   Serial.println("Short press -> center cube");
 }
@@ -649,7 +696,7 @@ void AppController::handleLongPress() {
 void AppController::handleExtraLongPress() {
   statusVisible_ = false;
   const bool saved = saveScreenCalibration();
-  renderHomeText(pet_.currentText(), saved ? "cal saved" : "cal failed");
+  renderHomeText(saved ? "cal saved" : "cal failed");
 
   Serial.println(saved ? "Extra long press -> save calibration"
                        : "Extra long press -> calibration failed");
