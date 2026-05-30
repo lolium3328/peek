@@ -164,10 +164,12 @@ void AppController::loop() {
 
     if (event.pressed) {
       lastTouchMs_ = now;
+      resetMotionBaseline();
     }
   }
 
   detectHeldPetGesture(now);
+  detectCubeThrow(now);
 
   if (event.sampled && !holdGestureConsumed_) {
     if (event.type == TouchEventType::ExtraLongPress) {
@@ -463,9 +465,6 @@ void AppController::updateCubeRecovery(uint32_t now, float dt, float frameScale)
 
 void AppController::detectHeldPetGesture(uint32_t now) {
   if (holdGestureConsumed_ || !touch_.isPressed() || !imu_.lastSample().valid) {
-    if (!touch_.isPressed()) {
-      resetMotionBaseline();
-    }
     return;
   }
 
@@ -502,6 +501,35 @@ void AppController::detectHeldPetGesture(uint32_t now) {
   Serial.print(pet_.isCubePet() ? "cube" : pet_.currentPetText());
   Serial.print(" motion ");
   Serial.println(motion);
+}
+
+void AppController::detectCubeThrow(uint32_t now) {
+  if (touch_.isPressed() || statusVisible_ || !pet_.isCubePet() || !imu_.lastSample().valid) {
+    return;
+  }
+
+  const ImuSample &sample = imu_.lastSample();
+  if (!hasMotionBaseline_) {
+    previousAccelX_ = sample.accelX;
+    previousAccelY_ = sample.accelY;
+    previousAccelZ_ = sample.accelZ;
+    hasMotionBaseline_ = true;
+    return;
+  }
+
+  const int32_t accelDeltaX = static_cast<int32_t>(sample.accelX) - previousAccelX_;
+  const int32_t accelDeltaY = static_cast<int32_t>(sample.accelY) - previousAccelY_;
+  const int32_t accelDeltaZ = static_cast<int32_t>(sample.accelZ) - previousAccelZ_;
+  previousAccelX_ = sample.accelX;
+  previousAccelY_ = sample.accelY;
+  previousAccelZ_ = sample.accelZ;
+
+  const int32_t motion = labs(accelDeltaX) + labs(accelDeltaY) + labs(accelDeltaZ);
+  if (motion < kThrowAccelDeltaThreshold || now - lastCubeThrowStartMs_ < kThrowCooldownMs) {
+    return;
+  }
+
+  startCubeThrow(now, accelDeltaX, accelDeltaY, accelDeltaZ);
 }
 
 void AppController::resetMotionBaseline() {

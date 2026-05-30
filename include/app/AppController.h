@@ -35,6 +35,7 @@ private:
   void startCubeRecovery(uint32_t now);
   void updateCubeRecovery(uint32_t now, float dt, float frameScale);
   void detectHeldPetGesture(uint32_t now);
+  void detectCubeThrow(uint32_t now);
   void resetMotionBaseline();
   void stopCubeThrow();
   void startCubeThrow(uint32_t now, int32_t accelDeltaX, int32_t accelDeltaY, int32_t accelDeltaZ);
