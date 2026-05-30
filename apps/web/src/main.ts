@@ -35,7 +35,6 @@ const refs = {
   wifiRssi: byId<HTMLElement>("wifi-rssi"),
   batteryPercent: byId<HTMLElement>("battery-percent"),
   storageFree: byId<HTMLElement>("storage-free"),
-  touchAnalog: byId<HTMLElement>("touch-analog"),
   imuPitch: byId<HTMLElement>("imu-pitch"),
   imuRoll: byId<HTMLElement>("imu-roll"),
   imuYaw: byId<HTMLElement>("imu-yaw"),
@@ -438,7 +437,6 @@ function renderStatus(snapshot: AppSnapshot) {
   refs.batteryPercent.textContent =
     status.batteryPercent === null ? "--" : `${Math.round(status.batteryPercent)}%`;
   refs.storageFree.textContent = storageLabel(status.storage.freeBytes, status.storage.totalBytes);
-  refs.touchAnalog.textContent = status.touchAnalog === null ? "--" : String(Math.round(status.touchAnalog));
   refs.imuPitch.textContent = degree(status.imu.pitch);
   refs.imuRoll.textContent = degree(status.imu.roll);
   refs.imuYaw.textContent = degree(status.imu.yaw);
