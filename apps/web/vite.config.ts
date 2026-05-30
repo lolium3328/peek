@@ -23,6 +23,9 @@ export default defineConfig({
     host: "0.0.0.0",
     port: 5173,
     https: viteHttps,
+    fs: {
+      allow: [root, join(root, "..", "..")]
+    },
     proxy: {
       "/api": {
         target: `${backendHttpProtocol}://localhost:${backendPort}`,
