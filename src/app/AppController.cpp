@@ -130,13 +130,23 @@ void AppController::begin() {
 void AppController::loop() {
   const uint32_t now = millis();
   provisioning_.loop(now);
-  if (!provisioning_.isActive()) {
+  const bool provisioningActive = provisioning_.isActive();
+  if (!provisioningActive) {
     network_.loop(now);
   }
   imu_.update(now);
-  if (!provisioning_.isActive()) {
-    backend_.loop(now, network_, imu_.pose(), imu_.isReady());
+
+  if (provisioningActive) {
+    statusVisible_ = false;
+    holdGestureConsumed_ = false;
+    resetMotionBaseline();
+    if (now - lastHomeRenderMs_ >= kHomeFrameIntervalMs) {
+      renderHomeFrame();
+    }
+    return;
   }
+
+  backend_.loop(now, network_, imu_.pose(), imu_.isReady());
   updateCubeThrow(now);
   updateCubeScale(now);
 
