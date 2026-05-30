@@ -146,7 +146,9 @@ void AppController::loop() {
     return;
   }
 
-  backend_.loop(now, network_, imu_.pose(), imu_.isReady());
+  if (!provisioningActive) {
+    backend_.loop(now, network_, imu_.pose(), imu_.isReady());
+  }
   updateCubeThrow(now);
   updateCubeScale(now);
 
@@ -211,7 +213,9 @@ void AppController::renderHomeText(const char *hintText) {
   model.wifiConnected = network_.isConnected();
   model.backendConnected = !provisioning_.isActive() && backend_.isConnected(millis());
   model.poseAlert = false;
-  applyCubeMotion(model, pose);
+  if (!provisioning_.isActive()) {
+    applyCubeMotion(model, pose);
+  }
   screen_.renderHome(model);
   lastHomeRenderMs_ = millis();
 }
@@ -231,7 +235,9 @@ void AppController::renderHomeFrame() {
   model.peerBatteryPercent = 79;
   model.wifiConnected = network_.isConnected();
   model.backendConnected = !provisioning_.isActive() && backend_.isConnected(millis());
-  applyCubeMotion(model, pose);
+  if (!provisioning_.isActive()) {
+    applyCubeMotion(model, pose);
+  }
   if (cubeThrown_) {
     screen_.renderHome(model);
   } else {
