@@ -40,6 +40,11 @@ export interface DeviceStatus {
   touchAnalog: number | null;
   lastEvent: string | null;
   imu: DeviceImuStatus;
+  storage: {
+    totalBytes: number | null;
+    usedBytes: number | null;
+    freeBytes: number | null;
+  };
   motorActive: boolean;
   updatedAt: number | null;
 }
@@ -86,10 +91,20 @@ export interface PetAsset {
   format: string;
   width: number;
   height: number;
+  sourceWidth?: number;
+  sourceHeight?: number;
+  deviceWidth?: number;
+  deviceHeight?: number;
   frames: number;
   fps: number;
+  durationMs?: number;
+  frameDelaysMs?: number[];
   size: number;
+  encodedSize?: number;
   path: string;
+  sourcePath?: string;
+  devicePath?: string;
+  deviceFormat?: "pka-rgb565-rle";
   createdAt: number;
   updatedAt: number;
 }
@@ -97,6 +112,7 @@ export interface PetAsset {
 export interface AssetManifest {
   version: number;
   revision: number;
+  pet2AssetId: string | null;
   assets: PetAsset[];
 }
 
@@ -210,6 +226,11 @@ export const defaultDeviceStatus = (): DeviceStatus => ({
     roll: null,
     yaw: null
   },
+  storage: {
+    totalBytes: null,
+    usedBytes: null,
+    freeBytes: null
+  },
   motorActive: false,
   updatedAt: null
 });
@@ -262,6 +283,7 @@ export const defaultScreenLayout = (): ScreenLayout => ({
 export const defaultAssetManifest = (): AssetManifest => ({
   version: 1,
   revision: 0,
+  pet2AssetId: null,
   assets: []
 });
 
@@ -332,12 +354,23 @@ export function normalizeAssetManifest(
   patch: Partial<AssetManifest>,
   base: AssetManifest = defaultAssetManifest()
 ): AssetManifest {
+  const assets = Array.isArray(patch.assets)
+    ? patch.assets.map(normalizePetAsset).filter((asset): asset is PetAsset => asset !== null)
+    : base.assets;
+  const pet2AssetId =
+    typeof patch.pet2AssetId === "string" && assets.some((asset) => asset.id === patch.pet2AssetId)
+      ? patch.pet2AssetId
+      : patch.pet2AssetId === null
+        ? null
+        : assets.some((asset) => asset.id === base.pet2AssetId)
+          ? base.pet2AssetId
+          : null;
+
   return {
     version: 1,
     revision: intValue(patch.revision, base.revision, 0, Number.MAX_SAFE_INTEGER),
-    assets: Array.isArray(patch.assets)
-      ? patch.assets.map(normalizePetAsset).filter((asset): asset is PetAsset => asset !== null)
-      : base.assets
+    pet2AssetId,
+    assets
   };
 }
 
@@ -359,6 +392,11 @@ export function normalizeDeviceStatus(
       pitch: nullableNumber(patch.imu?.pitch, base.imu.pitch, -180, 180),
       roll: nullableNumber(patch.imu?.roll, base.imu.roll, -180, 180),
       yaw: nullableNumber(patch.imu?.yaw, base.imu.yaw, -180, 180)
+    },
+    storage: {
+      totalBytes: nullableNumber(patch.storage?.totalBytes, base.storage.totalBytes, 0, Number.MAX_SAFE_INTEGER),
+      usedBytes: nullableNumber(patch.storage?.usedBytes, base.storage.usedBytes, 0, Number.MAX_SAFE_INTEGER),
+      freeBytes: nullableNumber(patch.storage?.freeBytes, base.storage.freeBytes, 0, Number.MAX_SAFE_INTEGER)
     },
     motorActive: boolValue(patch.motorActive, base.motorActive),
     updatedAt: nullableNumber(patch.updatedAt, base.updatedAt, 0, Number.MAX_SAFE_INTEGER)
@@ -460,10 +498,22 @@ function normalizePetAsset(value: unknown): PetAsset | null {
     format: textValue(body.format, "binary", "binary"),
     width: intValue(body.width, 0, 0, 4096),
     height: intValue(body.height, 0, 0, 4096),
+    sourceWidth: optionalInt(body.sourceWidth, 0, 4096),
+    sourceHeight: optionalInt(body.sourceHeight, 0, 4096),
+    deviceWidth: optionalInt(body.deviceWidth, 0, 4096),
+    deviceHeight: optionalInt(body.deviceHeight, 0, 4096),
     frames: intValue(body.frames, 1, 1, 240),
     fps: intValue(body.fps, 6, 1, 60),
+    durationMs: optionalInt(body.durationMs, 1, Number.MAX_SAFE_INTEGER),
+    frameDelaysMs: Array.isArray(body.frameDelaysMs)
+      ? body.frameDelaysMs.map((delay) => intValue(delay, 100, 10, 60000))
+      : undefined,
     size: intValue(body.size, 0, 0, Number.MAX_SAFE_INTEGER),
+    encodedSize: optionalInt(body.encodedSize, 0, Number.MAX_SAFE_INTEGER),
     path,
+    sourcePath: typeof body.sourcePath === "string" ? body.sourcePath.trim() : undefined,
+    devicePath: typeof body.devicePath === "string" ? body.devicePath.trim() : undefined,
+    deviceFormat: body.deviceFormat === "pka-rgb565-rle" ? body.deviceFormat : undefined,
     createdAt: intValue(body.createdAt, Date.now(), 0, Number.MAX_SAFE_INTEGER),
     updatedAt: intValue(body.updatedAt, Date.now(), 0, Number.MAX_SAFE_INTEGER)
   };

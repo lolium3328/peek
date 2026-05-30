@@ -16,6 +16,7 @@ private:
   void drawTopStatus(const HomeScreenModel &model);
   void clearPetArea();
   void drawPetCube(const HomeScreenModel &model);
+  bool drawPetAnimation(const HomeScreenModel &model);
   void drawWeatherChip(int16_t x, const char *label, const char *weather);
   void drawConnectionDots(bool wifiConnected, bool backendConnected);
   void drawBottomHint(const char *hintText);

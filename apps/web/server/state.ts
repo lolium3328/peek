@@ -129,6 +129,14 @@ export function upsertAsset(asset: AssetManifest["assets"][number]) {
   return replaceAssetManifest({ assets });
 }
 
+export function setPet2Asset(assetId: string | null) {
+  if (assetId !== null && !assetManifest.assets.some((asset) => asset.id === assetId)) {
+    return assetManifest;
+  }
+
+  return replaceAssetManifest({ pet2AssetId: assetId });
+}
+
 export function deleteAsset(assetId: string) {
   const before = assetManifest.assets.length;
   const assets = assetManifest.assets.filter((item) => item.id !== assetId);
@@ -136,7 +144,10 @@ export function deleteAsset(assetId: string) {
     return null;
   }
 
-  return replaceAssetManifest({ assets });
+  return replaceAssetManifest({
+    assets,
+    pet2AssetId: assetManifest.pet2AssetId === assetId ? null : assetManifest.pet2AssetId
+  });
 }
 
 export function updateDeviceStatus(patch: Partial<DeviceStatus>) {

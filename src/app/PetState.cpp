@@ -9,6 +9,7 @@ const char *kPetTexts[] = {
 
 constexpr size_t kPetCount = sizeof(kPetTexts) / sizeof(kPetTexts[0]);
 constexpr size_t kCubePetIndex = 0;
+constexpr size_t kPet2Index = 1;
 } // namespace
 
 void PetState::reset() {
@@ -31,6 +32,10 @@ const char *PetState::currentPetText() const {
 
 bool PetState::isCubePet() const {
   return currentPetIndex_ == kCubePetIndex;
+}
+
+bool PetState::isPet2() const {
+  return currentPetIndex_ == kPet2Index;
 }
 
 bool PetState::isSleeping() const {

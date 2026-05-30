@@ -490,12 +490,29 @@ dd {
   align-items: center;
 }
 
+.asset-action {
+  min-height: 36px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
 .asset-row span,
 .asset-row em,
 .component-row span {
   color: var(--muted);
   font-size: 0.82rem;
   font-style: normal;
+  font-weight: 750;
+}
+
+.form-note {
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 11px 12px;
+  background: var(--soft);
+  color: var(--muted);
+  font-size: 0.86rem;
   font-weight: 750;
 }
 

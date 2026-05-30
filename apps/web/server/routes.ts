@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { extname, join } from "node:path";
 import { assetFilesRoot } from "./config";
+import { convertGifToPka } from "./gifConverter";
 import {
   currentAssetManifest,
   currentConfig,
@@ -12,6 +13,7 @@ import {
   previewLayout,
   resetDeviceConfig,
   sendDeviceCommand,
+  setPet2Asset,
   snapshot,
   updateLayout,
   upsertAsset,
@@ -72,6 +74,10 @@ export async function handleApiRequest(req: Request, url: URL): Promise<Response
 
   if (url.pathname.startsWith("/api/assets/files/") && req.method === "GET") {
     return handleAssetFile(url);
+  }
+
+  if (url.pathname.startsWith("/api/assets/") && url.pathname.endsWith("/pet2") && req.method === "POST") {
+    return handlePet2Asset(url);
   }
 
   if (url.pathname.startsWith("/api/assets/") && req.method === "DELETE") {
@@ -171,22 +177,61 @@ async function handleAssetUpload(req: Request) {
   const storedName = `${id}${originalExt || ".bin"}`;
   const path = join(assetFilesRoot, storedName);
   mkdirSync(assetFilesRoot, { recursive: true });
-  writeFileSync(path, Buffer.from(await file.arrayBuffer()));
+  const bytes = Buffer.from(await file.arrayBuffer());
+  writeFileSync(path, bytes);
 
-  const asset: PetAsset = {
-    id,
-    name: nonEmptyString(form.get("name"), file.name),
-    kind: normalizeAssetKind(form.get("kind")),
-    format: nonEmptyString(form.get("format"), originalExt.replace(".", "") || "binary"),
-    width: intFormValue(form.get("width"), 0, 0, 4096),
-    height: intFormValue(form.get("height"), 0, 0, 4096),
-    frames: intFormValue(form.get("frames"), 1, 1, 240),
-    fps: intFormValue(form.get("fps"), 6, 1, 60),
-    size: file.size,
-    path: `/api/assets/files/${storedName}`,
-    createdAt: now,
-    updatedAt: now
-  };
+  let asset: PetAsset;
+  const isGif = originalExt === ".gif" || file.type === "image/gif";
+  if (isGif) {
+    let converted: ReturnType<typeof convertGifToPka>;
+    try {
+      converted = convertGifToPka(bytes);
+    } catch (error) {
+      return errorResponse("INVALID_GIF", error instanceof Error ? error.message : "GIF 解析失败", 400);
+    }
+
+    const packageName = `${id}.pka`;
+    writeFileSync(join(assetFilesRoot, packageName), converted.packageBytes);
+    asset = {
+      id,
+      name: nonEmptyString(form.get("name"), file.name),
+      kind: "sprite",
+      format: "gif",
+      width: converted.deviceWidth,
+      height: converted.deviceHeight,
+      sourceWidth: converted.sourceWidth,
+      sourceHeight: converted.sourceHeight,
+      deviceWidth: converted.deviceWidth,
+      deviceHeight: converted.deviceHeight,
+      frames: converted.frameCount,
+      fps: converted.fpsEstimate,
+      durationMs: converted.durationMs,
+      frameDelaysMs: converted.frameDelaysMs,
+      size: file.size,
+      encodedSize: converted.packageBytes.length,
+      path: `/api/assets/files/${storedName}`,
+      sourcePath: `/api/assets/files/${storedName}`,
+      devicePath: `/api/assets/files/${packageName}`,
+      deviceFormat: "pka-rgb565-rle",
+      createdAt: now,
+      updatedAt: now
+    };
+  } else {
+    asset = {
+      id,
+      name: nonEmptyString(form.get("name"), file.name),
+      kind: normalizeAssetKind(form.get("kind")),
+      format: nonEmptyString(form.get("format"), originalExt.replace(".", "") || "binary"),
+      width: 0,
+      height: 0,
+      frames: 1,
+      fps: 1,
+      size: file.size,
+      path: `/api/assets/files/${storedName}`,
+      createdAt: now,
+      updatedAt: now
+    };
+  }
 
   return Response.json({ data: upsertAsset(asset) });
 }
@@ -212,15 +257,26 @@ function handleAssetDelete(url: URL) {
     return errorResponse("ASSET_NOT_FOUND", "资源不存在", 404);
   }
 
-  if (asset.path.startsWith("/api/assets/files/")) {
-    const fileName = decodeURIComponent(asset.path.replace("/api/assets/files/", ""));
-    const path = join(assetFilesRoot, fileName);
-    if (existsSync(path)) {
-      unlinkSync(path);
-    }
-  }
+  deleteAssetFile(asset.path);
+  if (asset.sourcePath) deleteAssetFile(asset.sourcePath);
+  if (asset.devicePath) deleteAssetFile(asset.devicePath);
 
   return Response.json({ data: deleteAsset(assetId) });
+}
+
+function handlePet2Asset(url: URL) {
+  const assetId = decodeURIComponent(
+    url.pathname.replace("/api/assets/", "").replace(/\/pet2$/, "")
+  );
+  const asset = currentAssetManifest().assets.find((item) => item.id === assetId);
+  if (!asset) {
+    return errorResponse("ASSET_NOT_FOUND", "资源不存在", 404);
+  }
+  if (!asset.devicePath || asset.deviceFormat !== "pka-rgb565-rle") {
+    return errorResponse("UNSUPPORTED_ASSET", "该资源没有设备动画包", 400);
+  }
+
+  return Response.json({ data: setPet2Asset(assetId) });
 }
 
 async function handleDeviceSync(req: Request) {
@@ -283,4 +339,15 @@ function intFormValue(value: FormDataEntryValue | null, fallback: number, min: n
 
 function normalizeAssetKind(value: FormDataEntryValue | null) {
   return value === "image" || value === "package" ? value : "sprite";
+}
+
+function deleteAssetFile(assetPath: string) {
+  if (!assetPath.startsWith("/api/assets/files/")) {
+    return;
+  }
+  const fileName = decodeURIComponent(assetPath.replace("/api/assets/files/", ""));
+  const path = join(assetFilesRoot, fileName);
+  if (existsSync(path)) {
+    unlinkSync(path);
+  }
 }

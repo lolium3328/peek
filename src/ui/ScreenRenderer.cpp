@@ -1,6 +1,7 @@
 #include "ui/ScreenRenderer.h"
 
 #include <Arduino.h>
+#include <LittleFS.h>
 #include <math.h>
 #include <stdio.h>
 
@@ -20,12 +21,33 @@ constexpr int16_t kPetAreaX = 61;
 constexpr int16_t kPetAreaY = 61;
 constexpr int16_t kPetAreaSize = 118;
 constexpr float kDefaultCubeScale = 32.0f;
+constexpr uint8_t kPkaHeaderSize = 12;
+constexpr uint8_t kPkaFrameEntrySize = 10;
 
 struct CubePoint {
   int16_t x = 0;
   int16_t y = 0;
   float z = 0.0f;
 };
+
+uint16_t readU16(File &file) {
+  uint8_t bytes[2];
+  if (file.read(bytes, sizeof(bytes)) != sizeof(bytes)) {
+    return 0;
+  }
+  return static_cast<uint16_t>(bytes[0]) | (static_cast<uint16_t>(bytes[1]) << 8);
+}
+
+uint32_t readU32(File &file) {
+  uint8_t bytes[4];
+  if (file.read(bytes, sizeof(bytes)) != sizeof(bytes)) {
+    return 0;
+  }
+  return static_cast<uint32_t>(bytes[0])
+         | (static_cast<uint32_t>(bytes[1]) << 8)
+         | (static_cast<uint32_t>(bytes[2]) << 16)
+         | (static_cast<uint32_t>(bytes[3]) << 24);
+}
 
 uint16_t stateColor(bool active) {
   return active ? kGreen : kMuted;
@@ -62,7 +84,9 @@ void ScreenRenderer::renderHome(const HomeScreenModel &model) {
     display_.drawCircle(kScreenCenter, kScreenCenter, 72, kAmber);
   }
 
-  if (model.cubeVisible) {
+  if (model.petAnimationVisible && drawPetAnimation(model)) {
+    // Drawn from cached asset package.
+  } else if (model.cubeVisible) {
     drawPetCube(model);
   } else {
     display_.drawTextCentered(model.primaryText, 122, DisplayTextStyle::Primary, kWhite);
@@ -77,7 +101,9 @@ void ScreenRenderer::renderHomeFrame(const HomeScreenModel &model) {
     display_.drawCircle(kScreenCenter, kScreenCenter, 72, kAmber);
   }
 
-  if (model.cubeVisible) {
+  if (model.petAnimationVisible && drawPetAnimation(model)) {
+    // Drawn from cached asset package.
+  } else if (model.cubeVisible) {
     drawPetCube(model);
   } else {
     display_.drawTextCentered(model.primaryText, 122, DisplayTextStyle::Primary, kWhite);
@@ -182,6 +208,91 @@ void ScreenRenderer::drawPetCube(const HomeScreenModel &model) {
     const uint16_t color = (a.z + b.z) > 0.0f ? kGreen : kMuted;
     display_.drawLine(a.x, a.y, b.x, b.y, color);
   }
+}
+
+bool ScreenRenderer::drawPetAnimation(const HomeScreenModel &model) {
+  if (!model.petAnimationPath || model.petAnimationPath[0] == '\0') {
+    return false;
+  }
+
+  File file = LittleFS.open(model.petAnimationPath, "r");
+  if (!file) {
+    return false;
+  }
+
+  char magic[4];
+  if (file.read(reinterpret_cast<uint8_t *>(magic), sizeof(magic)) != sizeof(magic)
+      || magic[0] != 'P' || magic[1] != 'K' || magic[2] != 'A' || magic[3] != '1') {
+    file.close();
+    return false;
+  }
+
+  const uint16_t width = readU16(file);
+  const uint16_t height = readU16(file);
+  const uint16_t frameCount = readU16(file);
+  readU16(file);
+  if (width == 0 || height == 0 || width > kPetAreaSize || height > kPetAreaSize || frameCount == 0) {
+    file.close();
+    return false;
+  }
+
+  uint32_t totalDuration = 0;
+  for (uint16_t index = 0; index < frameCount; ++index) {
+    file.seek(kPkaHeaderSize + index * kPkaFrameEntrySize + 8);
+    totalDuration += readU16(file);
+  }
+  if (totalDuration == 0) {
+    file.close();
+    return false;
+  }
+
+  const uint32_t frameTime = millis() % totalDuration;
+  uint32_t elapsed = 0;
+  uint16_t frameIndex = 0;
+  uint32_t frameOffset = 0;
+  uint32_t frameLength = 0;
+  for (; frameIndex < frameCount; ++frameIndex) {
+    file.seek(kPkaHeaderSize + frameIndex * kPkaFrameEntrySize);
+    frameOffset = readU32(file);
+    frameLength = readU32(file);
+    const uint16_t delayMs = readU16(file);
+    if (frameTime < elapsed + delayMs) {
+      break;
+    }
+    elapsed += delayMs;
+  }
+  if (frameIndex >= frameCount || frameOffset == 0 || frameLength == 0) {
+    file.close();
+    return false;
+  }
+
+  const int16_t originX = kScreenCenter - static_cast<int16_t>(width) / 2;
+  const int16_t originY = kCubeCenterY - static_cast<int16_t>(height) / 2;
+  uint16_t row[kPetAreaSize];
+  uint16_t rowX = 0;
+  uint16_t rowY = 0;
+  uint32_t remainingPixels = static_cast<uint32_t>(width) * height;
+  uint32_t bytesRead = 0;
+  file.seek(frameOffset);
+
+  while (remainingPixels > 0 && bytesRead + 4 <= frameLength) {
+    uint16_t runLength = readU16(file);
+    const uint16_t color = readU16(file);
+    bytesRead += 4;
+    while (runLength > 0 && remainingPixels > 0) {
+      row[rowX++] = color;
+      runLength -= 1;
+      remainingPixels -= 1;
+      if (rowX == width) {
+        display_.drawRgb565Bitmap(originX, originY + rowY, row, width, 1);
+        rowX = 0;
+        rowY += 1;
+      }
+    }
+  }
+
+  file.close();
+  return remainingPixels == 0;
 }
 
 void ScreenRenderer::drawWeatherChip(int16_t x, const char *label, const char *weather) {

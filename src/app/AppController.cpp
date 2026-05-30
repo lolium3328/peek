@@ -216,6 +216,10 @@ void AppController::renderHomeText(const char *hintText) {
   if (!provisioning_.isActive()) {
     applyCubeMotion(model, pose);
   }
+  if (pet_.isPet2() && assetStore_.hasPet2Animation()) {
+    model.petAnimationVisible = true;
+    model.petAnimationPath = assetStore_.pet2AnimationPath().c_str();
+  }
   screen_.renderHome(model);
   lastHomeRenderMs_ = millis();
 }
@@ -237,6 +241,10 @@ void AppController::renderHomeFrame() {
   model.backendConnected = !provisioning_.isActive() && backend_.isConnected(millis());
   if (!provisioning_.isActive()) {
     applyCubeMotion(model, pose);
+  }
+  if (pet_.isPet2() && assetStore_.hasPet2Animation()) {
+    model.petAnimationVisible = true;
+    model.petAnimationPath = assetStore_.pet2AnimationPath().c_str();
   }
   if (cubeThrown_) {
     screen_.renderHome(model);

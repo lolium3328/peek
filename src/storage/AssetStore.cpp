@@ -1,6 +1,7 @@
 #include "storage/AssetStore.h"
 
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include <LittleFS.h>
 
 namespace {
@@ -36,6 +37,7 @@ bool AssetStore::saveManifestJson(const String &json) {
   }
 
   manifestJson_ = json;
+  refreshPet2AnimationPath();
   if (!ready_) {
     return false;
   }
@@ -54,6 +56,54 @@ bool AssetStore::saveManifestJson(const String &json) {
 
 bool AssetStore::hasManifest() const {
   return manifestJson_.length() > 0;
+}
+
+bool AssetStore::hasPet2Animation() const {
+  return pet2AnimationPath_.length() > 0;
+}
+
+const String &AssetStore::pet2AnimationPath() const {
+  return pet2AnimationPath_;
+}
+
+String AssetStore::localAnimationPath(const String &assetId) const {
+  return String(kAssetsDir) + "/" + assetId + ".pka";
+}
+
+bool AssetStore::hasAnimationFile(const String &assetId, size_t expectedSize) const {
+  if (!ready_ || assetId.length() == 0) {
+    return false;
+  }
+
+  File file = LittleFS.open(localAnimationPath(assetId), "r");
+  if (!file) {
+    return false;
+  }
+  const bool matches = expectedSize == 0 || file.size() == expectedSize;
+  file.close();
+  return matches;
+}
+
+bool AssetStore::canStoreAsset(size_t encodedSize, size_t reserveBytes) const {
+  if (!ready_) {
+    return false;
+  }
+  const size_t total = LittleFS.totalBytes();
+  const size_t used = LittleFS.usedBytes();
+  if (total <= used + reserveBytes) {
+    return false;
+  }
+  return encodedSize <= total - used - reserveBytes;
+}
+
+bool AssetStore::markPet2AnimationDownloaded(const String &assetId) {
+  if (assetId.length() == 0 || !hasAnimationFile(assetId, 0)) {
+    return false;
+  }
+
+  pet2AssetId_ = assetId;
+  pet2AnimationPath_ = localAnimationPath(assetId);
+  return true;
 }
 
 bool AssetStore::ensureDefaultManifest() {
@@ -83,8 +133,32 @@ bool AssetStore::loadManifest() {
   if (manifestJson_.length() == 0) {
     manifestJson_ = kDefaultManifestJson;
   }
+  refreshPet2AnimationPath();
 
   Serial.print("Asset manifest loaded bytes ");
   Serial.println(manifestJson_.length());
   return true;
+}
+
+void AssetStore::refreshPet2AnimationPath() {
+  pet2AssetId_ = "";
+  pet2AnimationPath_ = "";
+
+  JsonDocument doc;
+  if (deserializeJson(doc, manifestJson_)) {
+    return;
+  }
+
+  const char *assetId = doc["pet2AssetId"] | "";
+  if (!assetId || assetId[0] == '\0') {
+    return;
+  }
+
+  const String candidateId(assetId);
+  if (!hasAnimationFile(candidateId, 0)) {
+    return;
+  }
+
+  pet2AssetId_ = candidateId;
+  pet2AnimationPath_ = localAnimationPath(candidateId);
 }

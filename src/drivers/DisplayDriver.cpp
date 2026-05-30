@@ -172,6 +172,15 @@ void DisplayDriver::fillRect(
   gfx_->fillRect(x, y, width, height, color);
 }
 
+void DisplayDriver::drawRgb565Bitmap(
+    int16_t x,
+    int16_t y,
+    const uint16_t *pixels,
+    int16_t width,
+    int16_t height) {
+  gfx_->draw16bitRGBBitmap(x, y, const_cast<uint16_t *>(pixels), width, height);
+}
+
 void DisplayDriver::applyTextStyle(DisplayTextStyle style, uint16_t color) {
   gfx_->setTextColor(color);
   gfx_->setTextSize(1);

@@ -34,6 +34,7 @@ const refs = {
   ipAddress: byId<HTMLElement>("ip-address"),
   wifiRssi: byId<HTMLElement>("wifi-rssi"),
   batteryPercent: byId<HTMLElement>("battery-percent"),
+  storageFree: byId<HTMLElement>("storage-free"),
   touchAnalog: byId<HTMLElement>("touch-analog"),
   imuPitch: byId<HTMLElement>("imu-pitch"),
   imuRoll: byId<HTMLElement>("imu-roll"),
@@ -59,7 +60,7 @@ const refs = {
 
 let currentSnapshot: AppSnapshot | null = null;
 const firmwarePreview = new FirmwareScreenPreview(refs.firmwarePreviewCanvas);
-let assetManifest: AssetManifest = { version: 1, revision: 0, assets: [] };
+let assetManifest: AssetManifest = { version: 1, revision: 0, pet2AssetId: null, assets: [] };
 let layoutDraft: ScreenLayout = defaultScreenLayout();
 let firmwarePreviewMode: PreviewScreenMode = "home";
 let socket: WebSocket | null = null;
@@ -361,6 +362,19 @@ function applySnapshot(snapshot: AppSnapshot) {
   firmwarePreview.setSnapshot(snapshot);
 }
 
+async function setPet2Asset(id: string) {
+  renderAssetError("设置中");
+  try {
+    assetManifest = await request<AssetManifest>(`/api/assets/${encodeURIComponent(id)}/pet2`, {
+      method: "POST"
+    });
+    renderAssets();
+    renderAssetError("已设为 Pet2");
+  } catch (error) {
+    renderAssetError(errorMessage(error));
+  }
+}
+
 function fillConfigForm(config: DeviceConfig) {
   setInput("deviceName", config.deviceName);
   setInput("deviceId", config.deviceId);
@@ -423,6 +437,7 @@ function renderStatus(snapshot: AppSnapshot) {
   refs.wifiRssi.textContent = status.wifiRssi === null ? "--" : `${Math.round(status.wifiRssi)} dBm`;
   refs.batteryPercent.textContent =
     status.batteryPercent === null ? "--" : `${Math.round(status.batteryPercent)}%`;
+  refs.storageFree.textContent = storageLabel(status.storage.freeBytes, status.storage.totalBytes);
   refs.touchAnalog.textContent = status.touchAnalog === null ? "--" : String(Math.round(status.touchAnalog));
   refs.imuPitch.textContent = degree(status.imu.pitch);
   refs.imuRoll.textContent = degree(status.imu.roll);
@@ -456,14 +471,21 @@ function renderAssets() {
       row.innerHTML = `
         <div>
           <strong>${escapeHtml(asset.name)}</strong>
-          <span>${asset.kind} · ${asset.format} · ${asset.frames} 帧 · ${asset.fps} fps</span>
+          <span>${assetMetaLabel(asset)}</span>
+          <span>${storageFitLabel(asset)}</span>
         </div>
         <div>
-          <em>${formatBytes(asset.size)}</em>
+          <em>${formatBytes(asset.encodedSize ?? asset.size)}</em>
+          <button class="secondary-button asset-action" type="button" data-action="pet2">
+            ${assetManifest.pet2AssetId === asset.id ? "Pet2" : "设为 Pet2"}
+          </button>
           <button class="icon-button" type="button" title="删除">${icon("trash-2")}</button>
         </div>
       `;
-      row.querySelector("button")?.addEventListener("click", () => {
+      row.querySelector<HTMLButtonElement>("[data-action='pet2']")?.addEventListener("click", () => {
+        void setPet2Asset(asset.id);
+      });
+      row.querySelector<HTMLButtonElement>(".icon-button")?.addEventListener("click", () => {
         void deleteAsset(asset.id);
       });
       return row;
@@ -710,6 +732,32 @@ function formatBytes(value: number) {
   return `${(value / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function storageLabel(freeBytes: number | null, totalBytes: number | null) {
+  if (freeBytes === null || totalBytes === null) {
+    return "--";
+  }
+  return `${formatBytes(freeBytes)} / ${formatBytes(totalBytes)}`;
+}
+
+function assetMetaLabel(asset: AssetManifest["assets"][number]) {
+  const sourceSize =
+    asset.sourceWidth && asset.sourceHeight ? `${asset.sourceWidth}x${asset.sourceHeight}` : `${asset.width}x${asset.height}`;
+  const deviceSize =
+    asset.deviceWidth && asset.deviceHeight ? ` -> ${asset.deviceWidth}x${asset.deviceHeight}` : "";
+  return `${asset.kind} · ${asset.format}${deviceSize ? ` · ${sourceSize}${deviceSize}` : ` · ${sourceSize}`} · ${asset.frames} 帧 · ${asset.fps} fps`;
+}
+
+function storageFitLabel(asset: AssetManifest["assets"][number]) {
+  const encodedSize = asset.encodedSize ?? asset.size;
+  const storage = currentSnapshot?.status.storage;
+  if (!storage || storage.freeBytes === null) {
+    return "设备空间未确认";
+  }
+  const reserveBytes = 128 * 1024;
+  const available = Math.max(0, storage.freeBytes - reserveBytes);
+  return encodedSize <= available ? `设备可下载 · 预留 ${formatBytes(reserveBytes)}` : "设备空间不足";
+}
+
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (char) => {
     const map: Record<string, string> = {
@@ -766,9 +814,9 @@ function shell() {
           <strong id="wifi-rssi">--</strong>
         </article>
         <article class="status-card">
-          <div class="card-icon">${icon("gauge")}</div>
-          <span>触摸</span>
-          <strong id="touch-analog">--</strong>
+          <div class="card-icon">${icon("hard-drive")}</div>
+          <span>设备空间</span>
+          <strong id="storage-free">--</strong>
         </article>
       </section>
 
@@ -1004,26 +1052,7 @@ function shell() {
                   <option value="package">package</option>
                 </select>
               </label>
-              <label class="field">
-                <span>格式</span>
-                <input name="format" type="text" value="rgb565-rle" />
-              </label>
-              <label class="field">
-                <span>帧数</span>
-                <input name="frames" type="number" min="1" max="240" value="6" />
-              </label>
-              <label class="field">
-                <span>FPS</span>
-                <input name="fps" type="number" min="1" max="60" value="6" />
-              </label>
-              <label class="field">
-                <span>宽</span>
-                <input name="width" type="number" min="0" max="4096" value="0" />
-              </label>
-              <label class="field">
-                <span>高</span>
-                <input name="height" type="number" min="0" max="4096" value="0" />
-              </label>
+              <p class="form-note field--wide">GIF 会自动识别尺寸、帧数和帧延迟，并等比缩放到 Pet2 显示区域。</p>
             </div>
             <div class="form-actions">
               <button class="primary-button" type="submit">${icon("upload")}<span>上传</span></button>

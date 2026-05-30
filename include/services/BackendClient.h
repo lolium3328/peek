@@ -3,6 +3,8 @@
 #include <WString.h>
 #include <stdint.h>
 
+#include <ArduinoJson.h>
+
 #include "config/DeviceConfig.h"
 #include "drivers/ImuDriver.h"
 #include "services/NetworkService.h"
@@ -23,6 +25,8 @@ private:
   String endpoint(const char *path) const;
   String buildSyncPayload(const NetworkService &network, const ImuPose &pose, bool imuReady) const;
   bool applySyncResponse(const String &body);
+  void syncPet2Asset(JsonObject assets);
+  bool downloadAssetFile(const String &url, const String &localPath, size_t expectedSize);
 
   const DeviceConfig *config_ = nullptr;
   LayoutStore *layoutStore_ = nullptr;

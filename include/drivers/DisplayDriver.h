@@ -29,6 +29,7 @@ public:
   void fillRoundRect(int16_t x, int16_t y, int16_t width, int16_t height, int16_t radius, uint16_t color);
   void drawRect(int16_t x, int16_t y, int16_t width, int16_t height, uint16_t color);
   void fillRect(int16_t x, int16_t y, int16_t width, int16_t height, uint16_t color);
+  void drawRgb565Bitmap(int16_t x, int16_t y, const uint16_t *pixels, int16_t width, int16_t height);
 
 private:
   void applyTextStyle(DisplayTextStyle style, uint16_t color);

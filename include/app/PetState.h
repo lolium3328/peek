@@ -10,6 +10,7 @@ public:
 
   const char *currentPetText() const;
   bool isCubePet() const;
+  bool isPet2() const;
   bool isSleeping() const;
 
 private:

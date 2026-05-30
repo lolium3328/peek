@@ -21,6 +21,8 @@ struct HomeScreenModel {
   float cubeOffsetX = 0.0f;
   float cubeOffsetY = 0.0f;
   float cubeScale = 32.0f;
+  bool petAnimationVisible = false;
+  const char *petAnimationPath = "";
 };
 
 struct BootScreenModel {

@@ -18,6 +18,7 @@
     "vite": "^7.2.4"
   },
   "dependencies": {
+    "gifuct-js": "^2.1.2",
     "lucide": "^1.16.0"
   }
 }
