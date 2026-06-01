@@ -736,9 +736,7 @@ void ScreenRenderer::updateRadialCursor(float cursorX, float cursorY, uint16_t c
   if (radialCursorDrawn_) {
     const int16_t previousX = kScreenCenter + static_cast<int16_t>(roundf(lastRadialCursorX_));
     const int16_t previousY = kScreenCenter + static_cast<int16_t>(roundf(lastRadialCursorY_));
-    display_.fillCircle(previousX, previousY, 9, kBlack);
-    drawRadialFrame(lastRadialItem_, radialSurfaceKind_ == RadialSurfaceKind::Calibration,
-                    lastRadialCompletedCount_);
+    display_.fillCircle(previousX, previousY, 8, kBlack);
   }
 
   drawRadialCursor(cursorX, cursorY, color);
