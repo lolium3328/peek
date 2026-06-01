@@ -1,31 +1,27 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { ServerWebSocket } from "bun";
-import { assetManifestPath, configPath, httpsEnabled, layoutPath, port } from "./config";
+import { assetManifestPath, configPath, httpsEnabled, port } from "./config";
 import { lanUrls } from "./network";
 import type { ClientData } from "./types";
 import {
   defaultAssetManifest,
   defaultDeviceConfig,
   defaultDeviceStatus,
-  defaultScreenLayout,
   normalizeAssetManifest,
   normalizeDeviceConfig,
   normalizeDeviceStatus,
-  normalizeScreenLayout,
   type AssetManifest,
   type AppSnapshot,
   type DeviceCommand,
   type DeviceConfig,
   type DeviceStatus,
-  type ScreenLayout,
   type ServerMessage
 } from "../src/shared";
 
 const clients = new Set<ServerWebSocket<ClientData>>();
 let deviceConfig = loadDeviceConfig();
 let deviceStatus = defaultDeviceStatus();
-let screenLayout = loadScreenLayout();
 let assetManifest = loadAssetManifest();
 
 export function addClient(ws: ServerWebSocket<ClientData>) {
@@ -50,7 +46,6 @@ export function snapshot(): AppSnapshot {
     serverTime: Date.now(),
     config: deviceConfig,
     status: deviceStatus,
-    layout: screenLayout,
     assets: assetManifest,
     lanUrls: lanUrls(port, httpsEnabled ? "https" : "http")
   };
@@ -62,10 +57,6 @@ export function currentConfig() {
 
 export function currentStatus() {
   return deviceStatus;
-}
-
-export function currentLayout() {
-  return screenLayout;
 }
 
 export function currentAssetManifest() {
@@ -86,27 +77,6 @@ export function resetDeviceConfig() {
   broadcastSnapshot();
   broadcastToDevices({ type: "config", config: deviceConfig });
   return deviceConfig;
-}
-
-export function updateLayout(layout: Partial<ScreenLayout>) {
-  screenLayout = normalizeScreenLayout(
-    {
-      ...layout,
-      revision: Date.now(),
-      updatedAt: Date.now()
-    },
-    screenLayout
-  );
-  saveScreenLayout(screenLayout);
-  broadcastSnapshot();
-  broadcastToDevices({ type: "layout", layout: screenLayout });
-  return screenLayout;
-}
-
-export function previewLayout(layout: Partial<ScreenLayout>) {
-  const preview = normalizeScreenLayout(layout, screenLayout);
-  broadcastToDevices({ type: "layout.preview", layout: preview });
-  return preview;
 }
 
 export function replaceAssetManifest(manifest: Partial<AssetManifest>) {
@@ -174,7 +144,6 @@ export function deviceSyncPayload(statusPatch: Partial<DeviceStatus>) {
   return {
     serverTime: Date.now(),
     config: deviceConfig,
-    layout: screenLayout,
     assets: assetManifest
   };
 }
@@ -242,24 +211,6 @@ function loadDeviceConfig() {
 function saveDeviceConfig(config: DeviceConfig) {
   mkdirSync(dirname(configPath), { recursive: true });
   writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
-}
-
-function loadScreenLayout() {
-  if (!existsSync(layoutPath)) {
-    return defaultScreenLayout();
-  }
-
-  try {
-    const raw = JSON.parse(readFileSync(layoutPath, "utf8")) as Partial<ScreenLayout>;
-    return normalizeScreenLayout(raw);
-  } catch {
-    return defaultScreenLayout();
-  }
-}
-
-function saveScreenLayout(layout: ScreenLayout) {
-  mkdirSync(dirname(layoutPath), { recursive: true });
-  writeFileSync(layoutPath, `${JSON.stringify(layout, null, 2)}\n`, "utf8");
 }
 
 function loadAssetManifest() {

@@ -82,9 +82,8 @@ bool writeHttpResponseToFile(HTTPClient &http, int status, const String &localPa
 }
 } // namespace
 
-void BackendClient::begin(const DeviceConfig &config, LayoutStore &layoutStore, AssetStore &assetStore) {
+void BackendClient::begin(const DeviceConfig &config, AssetStore &assetStore) {
   config_ = &config;
-  layoutStore_ = &layoutStore;
   assetStore_ = &assetStore;
   enabled_ = config.backendUrl.length() > 0;
 
@@ -200,7 +199,6 @@ String BackendClient::buildSyncPayload(
   JsonDocument doc;
   doc["deviceId"] = config_->deviceId;
   doc["token"] = config_->deviceToken;
-  doc["layoutCached"] = layoutStore_ && layoutStore_->hasLayout();
   doc["assetsCached"] = assetStore_ && assetStore_->hasManifest();
 
   JsonObject status = doc["status"].to<JsonObject>();
@@ -250,14 +248,6 @@ bool BackendClient::applySyncResponse(const String &body) {
   JsonObject data = doc["data"];
   if (data.isNull()) {
     return false;
-  }
-
-  if (!data["layout"].isNull() && layoutStore_) {
-    String layoutJson;
-    serializeJson(data["layout"], layoutJson);
-    if (layoutJson.length() > 0 && layoutJson != layoutStore_->layoutJson()) {
-      layoutStore_->saveLayoutJson(layoutJson);
-    }
   }
 
   if (!data["assets"].isNull() && assetStore_) {

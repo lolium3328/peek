@@ -3,15 +3,11 @@ import { icon, refreshIcons } from "./icons";
 import { FirmwareScreenPreview, type PreviewScreenMode } from "./screenPreview";
 import {
   defaultDeviceConfig,
-  defaultScreenLayout,
   type AppSnapshot,
   type AssetManifest,
   type DeviceCommand,
   type DeviceConfig,
   type DeviceSlot,
-  type LayoutComponent,
-  type LayoutComponentType,
-  type ScreenLayout,
   type ServerMessage
 } from "./shared";
 
@@ -48,11 +44,6 @@ const refs = {
   applyConfig: byId<HTMLButtonElement>("apply-config"),
   assetForm: byId<HTMLFormElement>("asset-form"),
   assetList: byId<HTMLElement>("asset-list"),
-  layoutCanvas: byId<HTMLElement>("layout-canvas"),
-  componentList: byId<HTMLElement>("component-list"),
-  layoutState: byId<HTMLElement>("layout-state"),
-  saveLayout: byId<HTMLButtonElement>("save-layout"),
-  previewLayout: byId<HTMLButtonElement>("preview-layout"),
   firmwarePreviewCanvas: byId<HTMLCanvasElement>("firmware-preview-canvas"),
   firmwarePreviewState: byId<HTMLElement>("firmware-preview-state")
 };
@@ -60,26 +51,14 @@ const refs = {
 let currentSnapshot: AppSnapshot | null = null;
 const firmwarePreview = new FirmwareScreenPreview(refs.firmwarePreviewCanvas);
 let assetManifest: AssetManifest = { version: 1, revision: 0, pet2AssetId: null, assets: [] };
-let layoutDraft: ScreenLayout = defaultScreenLayout();
 let firmwarePreviewMode: PreviewScreenMode = "home";
 let socket: WebSocket | null = null;
 let socketRetryTimer: number | undefined;
-let previewTimer: number | undefined;
 let draftDirty = false;
-let layoutDirty = false;
-let dragging:
-  | {
-      id: string;
-      pointerId: number;
-      offsetX: number;
-      offsetY: number;
-    }
-  | null = null;
 
 bindTabs();
 bindForm();
 bindAssets();
-bindLayout();
 bindFirmwarePreview();
 void loadSnapshot();
 connectSocket();
@@ -124,46 +103,6 @@ function bindAssets() {
   refs.assetForm.addEventListener("submit", (event) => {
     event.preventDefault();
     void uploadAsset();
-  });
-}
-
-function bindLayout() {
-  for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>("[data-add-component]"))) {
-    button.addEventListener("click", () => {
-      addComponent(button.dataset.addComponent as LayoutComponentType);
-    });
-  }
-
-  refs.saveLayout.addEventListener("click", () => {
-    void saveLayout();
-  });
-
-  refs.previewLayout.addEventListener("click", () => {
-    void sendLayoutPreview();
-  });
-
-  window.addEventListener("pointermove", (event) => {
-    if (!dragging) {
-      return;
-    }
-
-    const component = layoutDraft.components.find((item) => item.id === dragging?.id);
-    if (!component) {
-      return;
-    }
-
-    const rect = refs.layoutCanvas.getBoundingClientRect();
-    component.x = clampToScreen(((event.clientX - rect.left - dragging.offsetX) / rect.width) * 240);
-    component.y = clampToScreen(((event.clientY - rect.top - dragging.offsetY) / rect.height) * 240);
-    layoutDirty = true;
-    renderLayout();
-    queueLayoutPreview();
-  });
-
-  window.addEventListener("pointerup", (event) => {
-    if (dragging?.pointerId === event.pointerId) {
-      dragging = null;
-    }
   });
 }
 
@@ -279,36 +218,6 @@ async function deleteAsset(id: string) {
   }
 }
 
-async function saveLayout() {
-  refs.layoutState.textContent = "保存中";
-  try {
-    layoutDraft = await request<ScreenLayout>("/api/layout", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(layoutDraft)
-    });
-    layoutDirty = false;
-    renderLayout();
-    refs.layoutState.textContent = "已保存";
-  } catch (error) {
-    refs.layoutState.textContent = errorMessage(error);
-  }
-}
-
-async function sendLayoutPreview() {
-  refs.layoutState.textContent = "预览中";
-  try {
-    await request<ScreenLayout>("/api/layout/preview", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(layoutDraft)
-    });
-    refs.layoutState.textContent = "已下发预览";
-  } catch (error) {
-    refs.layoutState.textContent = errorMessage(error);
-  }
-}
-
 function connectSocket() {
   window.clearTimeout(socketRetryTimer);
   refs.socketState.textContent = "连接中";
@@ -326,9 +235,6 @@ function connectSocket() {
     const message = JSON.parse(String(event.data)) as ServerMessage;
     if (message.type === "snapshot") {
       applySnapshot(message);
-    } else if (message.type === "layout" && !layoutDirty) {
-      layoutDraft = structuredClone(message.layout);
-      renderLayout();
     } else if (message.type === "assets") {
       assetManifest = message.assets;
       renderAssets();
@@ -346,10 +252,6 @@ function applySnapshot(snapshot: AppSnapshot) {
   currentSnapshot = snapshot;
   assetManifest = snapshot.assets;
 
-  if (!layoutDirty) {
-    layoutDraft = structuredClone(snapshot.layout);
-  }
-
   if (!draftDirty && !refs.form.matches(":focus-within")) {
     fillConfigForm(snapshot.config);
   }
@@ -357,7 +259,6 @@ function applySnapshot(snapshot: AppSnapshot) {
   renderStatus(snapshot);
   renderUrls(snapshot.lanUrls);
   renderAssets();
-  renderLayout();
   firmwarePreview.setSnapshot(snapshot);
 }
 
@@ -492,123 +393,6 @@ function renderAssets() {
   refreshIcons();
 }
 
-function renderAssetError(text: string) {
-  byId<HTMLElement>("asset-state").textContent = text;
-}
-
-function renderLayout() {
-  refs.layoutCanvas.replaceChildren(
-    ...layoutDraft.components.map((component) => renderLayoutComponent(component))
-  );
-  refs.componentList.replaceChildren(
-    ...layoutDraft.components.map((component) => renderComponentRow(component))
-  );
-  refs.layoutState.textContent = layoutDirty ? "未保存" : "就绪";
-  refreshIcons();
-}
-
-function renderLayoutComponent(component: LayoutComponent) {
-  const node = document.createElement("button");
-  node.type = "button";
-  node.className = `layout-component layout-component--${component.type}`;
-  node.dataset.componentId = component.id;
-  node.style.left = `${(component.x / 240) * 100}%`;
-  node.style.top = `${(component.y / 240) * 100}%`;
-  node.title = component.label;
-
-  if (component.type === "arc") {
-    const radius = component.radius ?? 96;
-    node.style.width = `${(radius * 2 / 240) * 100}%`;
-    node.style.height = `${(radius * 2 / 240) * 100}%`;
-    node.style.borderColor = component.color ?? "#46c7a5";
-    node.textContent = component.label;
-  } else if (component.type === "sprite") {
-    const asset = assetManifest.assets.find((item) => item.id === component.assetId);
-    node.style.width = `${((component.width ?? 64) / 240) * 100}%`;
-    node.style.height = `${((component.height ?? 64) / 240) * 100}%`;
-    node.textContent = asset ? asset.name.slice(0, 8) : component.label;
-  } else if (component.type === "text") {
-    node.textContent = component.text || component.label;
-  } else if (component.type === "statusDot") {
-    node.textContent = "";
-  } else {
-    node.innerHTML = `<span class="preview-cube"></span>`;
-  }
-
-  node.addEventListener("pointerdown", (event) => {
-    const rect = refs.layoutCanvas.getBoundingClientRect();
-    dragging = {
-      id: component.id,
-      pointerId: event.pointerId,
-      offsetX: event.clientX - rect.left - (component.x / 240) * rect.width,
-      offsetY: event.clientY - rect.top - (component.y / 240) * rect.height
-    };
-    node.setPointerCapture(event.pointerId);
-  });
-
-  return node;
-}
-
-function renderComponentRow(component: LayoutComponent) {
-  const row = document.createElement("article");
-  row.className = "component-row";
-  row.innerHTML = `
-    <strong>${escapeHtml(component.label)}</strong>
-    <span>${component.type}</span>
-    <label>X <input type="number" min="0" max="240" value="${component.x}" data-axis="x" /></label>
-    <label>Y <input type="number" min="0" max="240" value="${component.y}" data-axis="y" /></label>
-    <button class="icon-button" type="button" title="删除">${icon("trash-2")}</button>
-  `;
-
-  for (const input of Array.from(row.querySelectorAll<HTMLInputElement>("input"))) {
-    input.addEventListener("input", () => {
-      const axis = input.dataset.axis === "x" ? "x" : "y";
-      component[axis] = clampToScreen(Number(input.value));
-      layoutDirty = true;
-      renderLayout();
-      queueLayoutPreview();
-    });
-  }
-
-  row.querySelector("button")?.addEventListener("click", () => {
-    layoutDraft.components = layoutDraft.components.filter((item) => item.id !== component.id);
-    layoutDirty = true;
-    renderLayout();
-    queueLayoutPreview();
-  });
-
-  return row;
-}
-
-function addComponent(type: LayoutComponentType) {
-  const id = `${type}-${Date.now().toString(36)}`;
-  const component: LayoutComponent = {
-    id,
-    type,
-    label: type,
-    x: 120,
-    y: 120,
-    width: type === "sprite" ? 64 : undefined,
-    height: type === "sprite" ? 64 : undefined,
-    radius: type === "arc" ? 96 : undefined,
-    startAngle: type === "arc" ? 135 : undefined,
-    endAngle: type === "arc" ? 225 : undefined,
-    text: type === "text" ? "Peek" : undefined,
-    color: type === "arc" || type === "statusDot" ? "#46c7a5" : undefined
-  };
-  layoutDraft.components.push(component);
-  layoutDirty = true;
-  renderLayout();
-  queueLayoutPreview();
-}
-
-function queueLayoutPreview() {
-  window.clearTimeout(previewTimer);
-  previewTimer = window.setTimeout(() => {
-    void sendLayoutPreview();
-  }, 220);
-}
-
 function syncRangeLabels() {
   refs.brightnessValue.textContent = `${getNumber("screenBrightness")}%`;
   refs.motorValue.textContent = `${getNumber("motorStrength")}%`;
@@ -716,10 +500,6 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "失败";
 }
 
-function clampToScreen(value: number) {
-  return Math.min(Math.max(Math.round(value), 0), 240);
-}
-
 function formatBytes(value: number) {
   if (value < 1024) {
     return `${value} B`;
@@ -791,7 +571,6 @@ function shell() {
         <button class="mode-tab is-active" type="button" data-mode="config">${icon("settings")}<span>配置</span></button>
         <button class="mode-tab" type="button" data-mode="preview">${icon("monitor")}<span>Preview</span></button>
         <button class="mode-tab" type="button" data-mode="assets">${icon("image")}<span>动画</span></button>
-        <button class="mode-tab" type="button" data-mode="layout">${icon("layout-dashboard")}<span>布局</span></button>
       </nav>
 
       <section class="status-strip" aria-label="设备状态">
@@ -1006,7 +785,7 @@ function shell() {
                 aria-label="Firmware screen preview"
               ></canvas>
             </div>
-            <div class="layout-toolbar">
+            <div class="preview-toolbar">
               <button class="secondary-button is-active" type="button" data-preview-screen="home">${icon("home")}<span>Home</span></button>
               <button class="secondary-button" type="button" data-preview-screen="homeFrame">${icon("scan-line")}<span>Frame</span></button>
               <button class="secondary-button" type="button" data-preview-screen="boot">${icon("power")}<span>Boot</span></button>
@@ -1066,34 +845,6 @@ function shell() {
         </div>
       </section>
 
-      <section data-view="layout" hidden>
-        <div class="layout-workspace">
-          <section class="panel-section layout-preview-panel">
-            <div class="section-heading">
-              <h2>${icon("monitor")} 屏幕布局</h2>
-              <span id="layout-state">就绪</span>
-            </div>
-            <div class="layout-editor">
-              <div class="screen-preview" id="layout-canvas" aria-label="屏幕预览"></div>
-            </div>
-            <div class="layout-toolbar">
-              <button class="secondary-button" type="button" data-add-component="cube">${icon("box")}<span>立方体</span></button>
-              <button class="secondary-button" type="button" data-add-component="sprite">${icon("image")}<span>动画</span></button>
-              <button class="secondary-button" type="button" data-add-component="arc">${icon("activity")}<span>圆弧</span></button>
-              <button class="secondary-button" type="button" data-add-component="text">${icon("type")}<span>文本</span></button>
-              <button class="secondary-button" type="button" id="preview-layout">${icon("radio")}<span>预览</span></button>
-              <button class="primary-button" type="button" id="save-layout">${icon("save")}<span>保存</span></button>
-            </div>
-          </section>
-
-          <section class="panel-section">
-            <div class="section-heading">
-              <h2>${icon("layers")} 组件</h2>
-            </div>
-            <div class="component-list" id="component-list"></div>
-          </section>
-        </div>
-      </section>
     </main>
   `;
 }

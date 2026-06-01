@@ -127,7 +127,6 @@ void AppController::begin() {
   configStore_.begin();
   config_ = configStore_.load();
   fileSystem_.begin();
-  layoutStore_.begin(fileSystem_);
   assetStore_.begin(fileSystem_);
 
   if (!display_.begin()) {
@@ -149,7 +148,7 @@ void AppController::begin() {
   provisioning_.begin(config_, configStore_);
   if (!provisioning_.isActive()) {
     network_.begin(config_);
-    backend_.begin(config_, layoutStore_, assetStore_);
+    backend_.begin(config_, assetStore_);
   }
   loadScreenCalibration();
   loadRadialCalibration();

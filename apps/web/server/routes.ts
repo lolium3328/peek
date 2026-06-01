@@ -5,17 +5,14 @@ import { convertGifToPka } from "./gifConverter";
 import {
   currentAssetManifest,
   currentConfig,
-  currentLayout,
   currentStatus,
   deleteAsset,
   deviceSyncPayload,
   patchDeviceConfig,
-  previewLayout,
   resetDeviceConfig,
   sendDeviceCommand,
   setPet2Asset,
   snapshot,
-  updateLayout,
   upsertAsset,
   updateDeviceStatus
 } from "./state";
@@ -23,8 +20,7 @@ import {
   normalizeDeviceCommand,
   type DeviceConfig,
   type DeviceStatus,
-  type PetAsset,
-  type ScreenLayout
+  type PetAsset
 } from "../src/shared";
 
 export async function handleApiRequest(req: Request, url: URL): Promise<Response | null> {
@@ -50,18 +46,6 @@ export async function handleApiRequest(req: Request, url: URL): Promise<Response
 
   if (url.pathname === "/api/status" && req.method === "GET") {
     return Response.json({ data: currentStatus() });
-  }
-
-  if (url.pathname === "/api/layout" && req.method === "GET") {
-    return Response.json({ data: currentLayout() });
-  }
-
-  if (url.pathname === "/api/layout" && req.method === "PUT") {
-    return handleLayoutSave(req);
-  }
-
-  if (url.pathname === "/api/layout/preview" && req.method === "POST") {
-    return handleLayoutPreview(req);
   }
 
   if (url.pathname === "/api/assets" && req.method === "GET") {
@@ -138,24 +122,6 @@ async function handleDeviceCommand(req: Request) {
   const command = normalizeDeviceCommand(body);
   const delivered = sendDeviceCommand(command);
   return Response.json({ data: { command, delivered } });
-}
-
-async function handleLayoutSave(req: Request) {
-  const body = await readJsonObject(req);
-  if (body instanceof Response) {
-    return body;
-  }
-
-  return Response.json({ data: updateLayout(body as Partial<ScreenLayout>) });
-}
-
-async function handleLayoutPreview(req: Request) {
-  const body = await readJsonObject(req);
-  if (body instanceof Response) {
-    return body;
-  }
-
-  return Response.json({ data: previewLayout(body as Partial<ScreenLayout>) });
 }
 
 async function handleAssetUpload(req: Request) {

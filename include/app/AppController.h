@@ -15,7 +15,6 @@
 #include "services/ProvisioningService.h"
 #include "storage/AssetStore.h"
 #include "storage/FileSystem.h"
-#include "storage/LayoutStore.h"
 #include "ui/ScreenRenderer.h"
 
 class AppController {
@@ -97,7 +96,6 @@ private:
   DeviceConfig config_ = defaultDeviceConfig();
   ConfigStore configStore_;
   FileSystem fileSystem_;
-  LayoutStore layoutStore_;
   AssetStore assetStore_;
   NetworkService network_;
   BackendClient backend_;

@@ -9,11 +9,10 @@
 #include "drivers/ImuDriver.h"
 #include "services/NetworkService.h"
 #include "storage/AssetStore.h"
-#include "storage/LayoutStore.h"
 
 class BackendClient {
 public:
-  void begin(const DeviceConfig &config, LayoutStore &layoutStore, AssetStore &assetStore);
+  void begin(const DeviceConfig &config, AssetStore &assetStore);
   void loop(uint32_t now, const NetworkService &network, const ImuPose &pose, bool imuReady);
 
   bool isEnabled() const;
@@ -29,7 +28,6 @@ private:
   bool downloadAssetFile(const String &url, const String &localPath, size_t expectedSize);
 
   const DeviceConfig *config_ = nullptr;
-  LayoutStore *layoutStore_ = nullptr;
   AssetStore *assetStore_ = nullptr;
   bool enabled_ = false;
   uint32_t lastSyncAttemptMs_ = 0;
