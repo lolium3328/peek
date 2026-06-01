@@ -63,6 +63,5 @@ struct RadialCalibrationModel {
   uint8_t completedCount = 0;
   float cursorX = 0.0f;
   float cursorY = 0.0f;
-  float holdProgress = 0.0f;
   bool failed = false;
 };

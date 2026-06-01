@@ -168,8 +168,7 @@ void ScreenRenderer::renderRadialCalibration(const RadialCalibrationModel &model
     lastRadialCompletedCount_ = model.completedCount;
   }
 
-  const uint16_t cursorColor = model.failed ? kRed : (model.holdProgress > 0.0f ? kGreen : kWhite);
-  updateRadialCursor(model.cursorX, model.cursorY, cursorColor);
+  updateRadialCursor(model.cursorX, model.cursorY, model.failed ? kRed : kWhite);
 }
 
 void ScreenRenderer::resetHomeCache() {
@@ -681,13 +680,16 @@ void ScreenRenderer::drawTinyBattery(int16_t x, int16_t y, uint8_t percent, uint
 void ScreenRenderer::drawRadialSector(float centerDeg, uint16_t color) {
   const float startDeg = centerDeg - 39.0f;
   const float endDeg = centerDeg + 39.0f;
-  for (float deg = startDeg; deg <= endDeg; deg += 1.5f) {
+  for (float deg = startDeg; deg < endDeg; deg += 2.0f) {
     const float radians = deg * DEG_TO_RAD;
-    const int16_t x1 = kScreenCenter + static_cast<int16_t>(roundf(cosf(radians) * 101.0f));
-    const int16_t y1 = kScreenCenter - static_cast<int16_t>(roundf(sinf(radians) * 101.0f));
-    const int16_t x2 = kScreenCenter + static_cast<int16_t>(roundf(cosf(radians) * 116.0f));
-    const int16_t y2 = kScreenCenter - static_cast<int16_t>(roundf(sinf(radians) * 116.0f));
-    display_.drawLine(x1, y1, x2, y2, color);
+    const float nextRadians = (deg + 2.0f) * DEG_TO_RAD;
+    for (float radius = 104.0f; radius <= 114.0f; radius += 2.0f) {
+      const int16_t x1 = kScreenCenter + static_cast<int16_t>(roundf(cosf(radians) * radius));
+      const int16_t y1 = kScreenCenter - static_cast<int16_t>(roundf(sinf(radians) * radius));
+      const int16_t x2 = kScreenCenter + static_cast<int16_t>(roundf(cosf(nextRadians) * radius));
+      const int16_t y2 = kScreenCenter - static_cast<int16_t>(roundf(sinf(nextRadians) * radius));
+      display_.drawLine(x1, y1, x2, y2, color);
+    }
   }
 }
 
@@ -700,8 +702,11 @@ void ScreenRenderer::drawRadialFrame(
   pet2WasActive = false;
   radialCursorDrawn_ = false;
 
-  display_.fillCircle(kScreenCenter, kScreenCenter, 54, kBlack);
   display_.fillRect(70, 207, 100, 18, kBlack);
+  drawRadialSector(270.0f, kBlack);
+  drawRadialSector(90.0f, kBlack);
+  drawRadialSector(180.0f, kBlack);
+  drawRadialSector(0.0f, kBlack);
   drawRadialSector(270.0f, radialItemColor(RadialMenuItem::Cancel,
                                            selectedItem == RadialMenuItem::Cancel));
   drawRadialSector(90.0f, radialItemColor(RadialMenuItem::Info,
@@ -710,13 +715,6 @@ void ScreenRenderer::drawRadialFrame(
                                            selectedItem == RadialMenuItem::PreviousPet));
   drawRadialSector(0.0f, radialItemColor(RadialMenuItem::NextPet,
                                          selectedItem == RadialMenuItem::NextPet));
-
-  display_.drawLine(199, 41, 184, 56, kLine);
-  display_.drawLine(41, 41, 56, 56, kLine);
-  display_.drawLine(41, 199, 56, 184, kLine);
-  display_.drawLine(199, 199, 184, 184, kLine);
-  display_.drawCircle(kScreenCenter, kScreenCenter, 51, kLine);
-  display_.drawCircle(kScreenCenter, kScreenCenter, 52, 0x0841);
 
   if (calibrationMode) {
     char stepText[12];
@@ -739,10 +737,10 @@ void ScreenRenderer::updateRadialCursor(float cursorX, float cursorY, uint16_t c
     const int16_t previousX = kScreenCenter + static_cast<int16_t>(roundf(lastRadialCursorX_));
     const int16_t previousY = kScreenCenter + static_cast<int16_t>(roundf(lastRadialCursorY_));
     display_.fillCircle(previousX, previousY, 9, kBlack);
+    drawRadialFrame(lastRadialItem_, radialSurfaceKind_ == RadialSurfaceKind::Calibration,
+                    lastRadialCompletedCount_);
   }
 
-  display_.drawCircle(kScreenCenter, kScreenCenter, 51, kLine);
-  display_.drawCircle(kScreenCenter, kScreenCenter, 52, 0x0841);
   drawRadialCursor(cursorX, cursorY, color);
   lastRadialCursorX_ = cursorX;
   lastRadialCursorY_ = cursorY;

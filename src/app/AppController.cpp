@@ -14,10 +14,8 @@ constexpr uint32_t kThrowMinSettleMs = 1400;
 constexpr uint32_t kThrowLogIntervalMs = 200;
 constexpr uint32_t kShortPressSequenceGapMs = 1500;
 constexpr uint8_t kImuLockShortPressCount = 4;
-constexpr uint32_t kRadialCalibrationDwellMs = 1000;
 constexpr float kRadialCursorGain = 3.0f;
-constexpr float kRadialCursorMinRadius = 10.0f;
-constexpr float kRadialCursorMaxRadius = 42.0f;
+constexpr float kRadialCursorRadius = 108.0f;
 constexpr float kRadialCalibrationMinTurnDeg = 680.0f;
 constexpr float kRadialAdjacentMinDeg = 50.0f;
 constexpr float kRadialAdjacentMaxDeg = 130.0f;
@@ -51,6 +49,9 @@ constexpr const char *kPrefsScreenPitchKey = "screenPitch";
 constexpr const char *kPrefsScreenYawKey = "screenYaw";
 constexpr const char *kPrefsRadialCalibratedKey = "radialCal";
 constexpr const char *kPrefsRadialOffsetKey = "radialOffset";
+constexpr const char *kPrefsRadialSwapKey = "radialSwap";
+constexpr const char *kPrefsRadialFlipXKey = "radialFlipX";
+constexpr const char *kPrefsRadialFlipYKey = "radialFlipY";
 
 float relativeDegrees(float value, float zero) {
   float degrees = value - zero;
@@ -221,15 +222,22 @@ void AppController::loop() {
   }
 
   if (mode_ == AppMode::RadialCalibration) {
-    updateRadialCalibration(now);
-    if (releasedNow) {
+    if (event.type == TouchEventType::ShortPress) {
+      confirmRadialCalibrationSample(now);
+      holdGestureConsumed_ = false;
+      resetMotionBaseline();
+      return;
+    }
+    if (event.type == TouchEventType::LongPress || event.type == TouchEventType::ExtraLongPress) {
       mode_ = AppMode::Normal;
       radialCalibrationFailed_ = false;
-      holdGestureConsumed_ = false;
+      holdGestureConsumed_ = true;
       resetMotionBaseline();
       renderHomeText("cal cancel");
       Serial.println("Radial calibration canceled");
+      return;
     }
+    updateRadialCalibration(now);
     return;
   }
 
@@ -943,28 +951,53 @@ void AppController::loadRadialCalibration() {
 
   radialCalibrated_ = prefs.getBool(kPrefsRadialCalibratedKey, false);
   radialAngleOffsetDeg_ = prefs.getFloat(kPrefsRadialOffsetKey, 0.0f);
+  radialSwapAxes_ = prefs.getBool(kPrefsRadialSwapKey, false);
+  radialFlipX_ = prefs.getBool(kPrefsRadialFlipXKey, false);
+  radialFlipY_ = prefs.getBool(kPrefsRadialFlipYKey, false);
   prefs.end();
 
   Serial.print("Radial calibration ");
   Serial.print(radialCalibrated_ ? "loaded " : "default ");
-  Serial.println(radialAngleOffsetDeg_);
+  Serial.print(radialAngleOffsetDeg_);
+  Serial.print(" swap ");
+  Serial.print(radialSwapAxes_);
+  Serial.print(" flip ");
+  Serial.print(radialFlipX_);
+  Serial.print(",");
+  Serial.println(radialFlipY_);
 }
 
-bool AppController::saveRadialCalibration(float angleOffsetDeg) {
+bool AppController::saveRadialCalibration(
+    bool swapAxes,
+    bool flipX,
+    bool flipY,
+    float angleOffsetDeg) {
   Preferences prefs;
   if (!prefs.begin(kPrefsNamespace, false)) {
     Serial.println("Radial calibration save failed: prefs open");
     return false;
   }
 
+  radialSwapAxes_ = swapAxes;
+  radialFlipX_ = flipX;
+  radialFlipY_ = flipY;
   radialAngleOffsetDeg_ = normalizeDegrees(angleOffsetDeg);
   radialCalibrated_ = true;
   prefs.putFloat(kPrefsRadialOffsetKey, radialAngleOffsetDeg_);
+  prefs.putBool(kPrefsRadialSwapKey, radialSwapAxes_);
+  prefs.putBool(kPrefsRadialFlipXKey, radialFlipX_);
+  prefs.putBool(kPrefsRadialFlipYKey, radialFlipY_);
   prefs.putBool(kPrefsRadialCalibratedKey, true);
   prefs.end();
 
   Serial.print("Radial calibration saved ");
-  Serial.println(radialAngleOffsetDeg_);
+  Serial.print(radialAngleOffsetDeg_);
+  Serial.print(" swap ");
+  Serial.print(radialSwapAxes_);
+  Serial.print(" flip ");
+  Serial.print(radialFlipX_);
+  Serial.print(",");
+  Serial.println(radialFlipY_);
   return true;
 }
 
@@ -973,41 +1006,53 @@ bool AppController::radialCursor(
     float &cursorY,
     float &rawAngleDeg,
     float &mappedAngleDeg) const {
-  const ImuPose &pose = imu_.pose();
-  if (!pose.valid) {
+  float rawX = 0.0f;
+  float rawY = 0.0f;
+  if (!radialRawVector(rawX, rawY)) {
     cursorX = 0.0f;
-    cursorY = 0.0f;
+    cursorY = kRadialCursorRadius;
     rawAngleDeg = 270.0f;
     mappedAngleDeg = 270.0f;
     return false;
   }
 
-  cursorX = clampFloat(relativeDegrees(pose.rollDeg, cubeRollZeroDeg_) * kRadialCursorGain,
-                       -kRadialCursorMaxRadius,
-                       kRadialCursorMaxRadius);
-  cursorY = clampFloat(relativeDegrees(pose.pitchDeg, cubePitchZeroDeg_) * kRadialCursorGain,
-                       -kRadialCursorMaxRadius,
-                       kRadialCursorMaxRadius);
-
-  float radius = sqrtf(cursorX * cursorX + cursorY * cursorY);
-  if (radius < kRadialCursorMinRadius) {
-    if (radius < 1.0f) {
-      cursorX = 0.0f;
-      cursorY = kRadialCursorMinRadius;
-    } else {
-      cursorX = cursorX / radius * kRadialCursorMinRadius;
-      cursorY = cursorY / radius * kRadialCursorMinRadius;
-    }
-    radius = kRadialCursorMinRadius;
-  }
-  if (radius > kRadialCursorMaxRadius) {
-    cursorX = cursorX / radius * kRadialCursorMaxRadius;
-    cursorY = cursorY / radius * kRadialCursorMaxRadius;
-  }
-
-  rawAngleDeg = normalizeDegrees(atan2f(-cursorY, cursorX) * RAD_TO_DEG);
-  mappedAngleDeg = normalizeDegrees(rawAngleDeg + radialAngleOffsetDeg_);
+  rawAngleDeg = normalizeDegrees(atan2f(-rawY, rawX) * RAD_TO_DEG);
+  float mappedX = 0.0f;
+  float mappedY = 0.0f;
+  transformRadialVector(rawX, rawY, mappedX, mappedY);
+  const float transformedAngleDeg = normalizeDegrees(atan2f(-mappedY, mappedX) * RAD_TO_DEG);
+  mappedAngleDeg = normalizeDegrees(transformedAngleDeg + radialAngleOffsetDeg_);
+  const float cursorRadians = mappedAngleDeg * DEG_TO_RAD;
+  cursorX = cosf(cursorRadians) * kRadialCursorRadius;
+  cursorY = -sinf(cursorRadians) * kRadialCursorRadius;
   return true;
+}
+
+bool AppController::radialRawVector(float &rawX, float &rawY) const {
+  const ImuPose &pose = imu_.pose();
+  if (!pose.valid) {
+    rawX = 0.0f;
+    rawY = 0.0f;
+    return false;
+  }
+
+  rawX = relativeDegrees(pose.rollDeg, cubeRollZeroDeg_) * kRadialCursorGain;
+  rawY = relativeDegrees(pose.pitchDeg, cubePitchZeroDeg_) * kRadialCursorGain;
+  if (fabsf(rawX) + fabsf(rawY) < 1.0f) {
+    rawY = kRadialCursorRadius;
+  }
+  return true;
+}
+
+void AppController::transformRadialVector(float rawX, float rawY, float &mappedX, float &mappedY) const {
+  mappedX = radialSwapAxes_ ? rawY : rawX;
+  mappedY = radialSwapAxes_ ? rawX : rawY;
+  if (radialFlipX_) {
+    mappedX = -mappedX;
+  }
+  if (radialFlipY_) {
+    mappedY = -mappedY;
+  }
 }
 
 RadialMenuItem AppController::radialItemForAngle(float angleDeg) const {
@@ -1054,12 +1099,6 @@ void AppController::renderRadialCalibrationFrame() {
   model.cursorX = cursorX;
   model.cursorY = cursorY;
   model.failed = radialCalibrationFailed_;
-  if (calibrationDwellStartMs_ > 0) {
-    model.holdProgress =
-        clampFloat(static_cast<float>(millis() - calibrationDwellStartMs_) / kRadialCalibrationDwellMs,
-                   0.0f,
-                   1.0f);
-  }
   screen_.renderRadialCalibration(model);
   lastHomeRenderMs_ = millis();
 }
@@ -1109,10 +1148,10 @@ void AppController::enterRadialCalibration(uint32_t now) {
   mode_ = AppMode::RadialCalibration;
   calibrationStep_ = 0;
   calibrationTargetItem_ = RadialMenuItem::Info;
-  calibrationDwellStartMs_ = 0;
   radialCalibrationFailed_ = false;
   for (uint8_t index = 0; index < 4; ++index) {
-    calibrationRawAngles_[index] = 0.0f;
+    calibrationRawX_[index] = 0.0f;
+    calibrationRawY_[index] = 0.0f;
   }
   resetRadialSpinTracking();
   recordActivity(now);
@@ -1128,65 +1167,113 @@ void AppController::updateRadialCalibration(uint32_t now) {
       RadialMenuItem::NextPet,
   };
 
-  float cursorX = 0.0f;
-  float cursorY = 0.0f;
-  float rawAngleDeg = 0.0f;
-  float mappedAngleDeg = 0.0f;
-  const bool ready = radialCursor(cursorX, cursorY, rawAngleDeg, mappedAngleDeg);
-  if (!ready) {
-    calibrationDwellStartMs_ = 0;
-  } else {
-    calibrationTargetItem_ = kTargets[calibrationStep_];
-    const RadialMenuItem currentItem = radialItemForAngle(mappedAngleDeg);
-    if (currentItem == calibrationTargetItem_) {
-      if (calibrationDwellStartMs_ == 0) {
-        calibrationDwellStartMs_ = now;
-      } else if (now - calibrationDwellStartMs_ >= kRadialCalibrationDwellMs) {
-        calibrationRawAngles_[calibrationStep_] = rawAngleDeg;
-        ++calibrationStep_;
-        calibrationDwellStartMs_ = 0;
-        if (calibrationStep_ >= 4) {
-          const bool saved = finishRadialCalibration();
-          mode_ = AppMode::Normal;
-          renderHomeText(saved ? "menu cal ok" : "menu cal fail");
-          Serial.println(saved ? "Radial calibration complete" : "Radial calibration failed");
-          return;
-        }
-        calibrationTargetItem_ = kTargets[calibrationStep_];
-      }
-    } else {
-      calibrationDwellStartMs_ = 0;
-    }
-  }
+  calibrationTargetItem_ = kTargets[calibrationStep_];
 
   if (now - lastHomeRenderMs_ >= kHomeFrameIntervalMs) {
     renderRadialCalibrationFrame();
   }
 }
 
+void AppController::confirmRadialCalibrationSample(uint32_t now) {
+  static constexpr RadialMenuItem kTargets[4] = {
+      RadialMenuItem::Info,
+      RadialMenuItem::PreviousPet,
+      RadialMenuItem::Cancel,
+      RadialMenuItem::NextPet,
+  };
+
+  float rawX = 0.0f;
+  float rawY = 0.0f;
+  if (!radialRawVector(rawX, rawY)) {
+    radialCalibrationFailed_ = true;
+    renderRadialCalibrationFrame();
+    Serial.println("Radial calibration sample skipped: imu pose invalid");
+    return;
+  }
+
+  calibrationRawX_[calibrationStep_] = rawX;
+  calibrationRawY_[calibrationStep_] = rawY;
+  ++calibrationStep_;
+  recordActivity(now);
+
+  if (calibrationStep_ >= 4) {
+    const bool saved = finishRadialCalibration();
+    mode_ = AppMode::Normal;
+    renderHomeText(saved ? "menu cal ok" : "menu cal fail");
+    Serial.println(saved ? "Radial calibration complete" : "Radial calibration failed");
+    return;
+  }
+
+  calibrationTargetItem_ = kTargets[calibrationStep_];
+  radialCalibrationFailed_ = false;
+  renderRadialCalibrationFrame();
+  Serial.print("Radial calibration sample ");
+  Serial.println(calibrationStep_);
+}
+
 bool AppController::finishRadialCalibration() {
   static constexpr float kTargetAngles[4] = {90.0f, 180.0f, 270.0f, 0.0f};
+  float bestError = 100000.0f;
+  bool bestSwap = false;
+  bool bestFlipX = false;
+  bool bestFlipY = false;
+  float bestOffset = 0.0f;
 
-  for (uint8_t index = 0; index < 4; ++index) {
-    const uint8_t next = (index + 1) % 4;
-    const float distance = angleDistance(calibrationRawAngles_[index], calibrationRawAngles_[next]);
-    if (distance < kRadialAdjacentMinDeg || distance > kRadialAdjacentMaxDeg) {
-      radialCalibrationFailed_ = true;
-      Serial.print("Radial calibration adjacency failed ");
-      Serial.println(distance);
-      return false;
+  for (uint8_t swap = 0; swap < 2; ++swap) {
+    for (uint8_t flipX = 0; flipX < 2; ++flipX) {
+      for (uint8_t flipY = 0; flipY < 2; ++flipY) {
+        float angles[4];
+        float sinSum = 0.0f;
+        float cosSum = 0.0f;
+        for (uint8_t index = 0; index < 4; ++index) {
+          float mappedX = swap ? calibrationRawY_[index] : calibrationRawX_[index];
+          float mappedY = swap ? calibrationRawX_[index] : calibrationRawY_[index];
+          if (flipX) {
+            mappedX = -mappedX;
+          }
+          if (flipY) {
+            mappedY = -mappedY;
+          }
+          angles[index] = normalizeDegrees(atan2f(-mappedY, mappedX) * RAD_TO_DEG);
+          const float offset = normalizeDegrees(kTargetAngles[index] - angles[index]);
+          sinSum += sinf(offset * DEG_TO_RAD);
+          cosSum += cosf(offset * DEG_TO_RAD);
+        }
+
+        const float offsetDeg = normalizeDegrees(atan2f(sinSum, cosSum) * RAD_TO_DEG);
+        float error = 0.0f;
+        bool adjacencyOk = true;
+        for (uint8_t index = 0; index < 4; ++index) {
+          const float calibratedAngle = normalizeDegrees(angles[index] + offsetDeg);
+          error += angleDistance(calibratedAngle, kTargetAngles[index]);
+
+          const uint8_t next = (index + 1) % 4;
+          const float nextAngle = normalizeDegrees(angles[next] + offsetDeg);
+          const float distance = angleDistance(calibratedAngle, nextAngle);
+          if (distance < kRadialAdjacentMinDeg || distance > kRadialAdjacentMaxDeg) {
+            adjacencyOk = false;
+          }
+        }
+
+        if (adjacencyOk && error < bestError) {
+          bestError = error;
+          bestSwap = swap;
+          bestFlipX = flipX;
+          bestFlipY = flipY;
+          bestOffset = offsetDeg;
+        }
+      }
     }
   }
 
-  float sinSum = 0.0f;
-  float cosSum = 0.0f;
-  for (uint8_t index = 0; index < 4; ++index) {
-    const float offset = normalizeDegrees(kTargetAngles[index] - calibrationRawAngles_[index]);
-    sinSum += sinf(offset * DEG_TO_RAD);
-    cosSum += cosf(offset * DEG_TO_RAD);
+  if (bestError > 90.0f) {
+    radialCalibrationFailed_ = true;
+    Serial.print("Radial calibration failed error ");
+    Serial.println(bestError);
+    return false;
   }
-  const float offsetDeg = normalizeDegrees(atan2f(sinSum, cosSum) * RAD_TO_DEG);
-  return saveRadialCalibration(offsetDeg);
+
+  return saveRadialCalibration(bestSwap, bestFlipX, bestFlipY, bestOffset);
 }
 
 void AppController::resetRadialSpinTracking() {

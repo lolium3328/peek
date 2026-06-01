@@ -75,14 +75,17 @@ private:
   bool saveScreenCalibration();
   void centerCube();
   void loadRadialCalibration();
-  bool saveRadialCalibration(float angleOffsetDeg);
+  bool saveRadialCalibration(bool swapAxes, bool flipX, bool flipY, float angleOffsetDeg);
   bool radialCursor(float &cursorX, float &cursorY, float &rawAngleDeg, float &mappedAngleDeg) const;
+  bool radialRawVector(float &rawX, float &rawY) const;
+  void transformRadialVector(float rawX, float rawY, float &mappedX, float &mappedY) const;
   RadialMenuItem radialItemForAngle(float angleDeg) const;
   void enterRadialMenu(uint32_t now);
   void updateRadialMenu(uint32_t now);
   void completeRadialMenu(uint32_t now);
   void enterRadialCalibration(uint32_t now);
   void updateRadialCalibration(uint32_t now);
+  void confirmRadialCalibrationSample(uint32_t now);
   bool finishRadialCalibration();
   void resetRadialSpinTracking();
   void updateRadialSpinTracking(float rawAngleDeg);
@@ -123,7 +126,6 @@ private:
   uint32_t lastCubeThrowLogMs_ = 0;
   uint32_t lastCubeScaleUpdateMs_ = 0;
   uint32_t lastShortPressMs_ = 0;
-  uint32_t calibrationDwellStartMs_ = 0;
   uint32_t cubeScaleRecoverStartMs_ = 0;
   float cubeOffsetX_ = 0.0f;
   float cubeOffsetY_ = 0.0f;
@@ -148,5 +150,9 @@ private:
   float radialAngleOffsetDeg_ = 0.0f;
   float radialSpinPreviousAngleDeg_ = 0.0f;
   float radialSpinAccumulatedDeg_ = 0.0f;
-  float calibrationRawAngles_[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+  bool radialSwapAxes_ = false;
+  bool radialFlipX_ = false;
+  bool radialFlipY_ = false;
+  float calibrationRawX_[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+  float calibrationRawY_[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 };
