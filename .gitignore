@@ -24,9 +24,11 @@ coverage/
 .vite/
 .playwright-cli/
 .peek-data/
+.peek-preview/
 apps/*/node_modules/
 apps/*/dist/
 apps/*/coverage/
 apps/*/.vite/
 apps/*/.playwright-cli/
 apps/*/.peek-data/
+apps/*/.peek-preview/

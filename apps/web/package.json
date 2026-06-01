@@ -10,6 +10,7 @@
     "dev": "bun run build && bun --hot server/index.ts",
     "dev:client": "vite --host 0.0.0.0",
     "dev:server": "bun --hot server/index.ts",
+    "preview:png": "bun scripts/render-screen-preview.ts",
     "start": "bun server/index.ts"
   },
   "devDependencies": {
