@@ -146,6 +146,76 @@ void ScreenRenderer::renderStatus(const StatusScreenModel &model) {
   drawStatusPill(78, 211, model.backendConnected ? "backend ok" : "backend off", stateColor(model.backendConnected));
 }
 
+void ScreenRenderer::renderRadialMenu(const RadialMenuModel &model) {
+  resetHomeCache();
+  display_.clear(kBlack);
+
+  drawRadialSector(270.0f, radialItemColor(RadialMenuItem::Cancel, model.selectedItem == RadialMenuItem::Cancel));
+  drawRadialSector(90.0f, radialItemColor(RadialMenuItem::Info, model.selectedItem == RadialMenuItem::Info));
+  drawRadialSector(180.0f,
+                   radialItemColor(RadialMenuItem::PreviousPet,
+                                   model.selectedItem == RadialMenuItem::PreviousPet));
+  drawRadialSector(0.0f,
+                   radialItemColor(RadialMenuItem::NextPet,
+                                   model.selectedItem == RadialMenuItem::NextPet));
+
+  display_.drawLine(205, 35, 35, 205, kWhite);
+  display_.drawLine(35, 35, 205, 205, kWhite);
+  display_.drawCircle(kScreenCenter, kScreenCenter, 116, kLine);
+  display_.drawCircle(kScreenCenter, kScreenCenter, 76, kLine);
+  display_.fillCircle(kScreenCenter, kScreenCenter, 31, kBlack);
+  display_.drawCircle(kScreenCenter, kScreenCenter, 31, kWhite);
+
+  display_.drawTextCentered("info", 58, DisplayTextStyle::Small,
+                            model.selectedItem == RadialMenuItem::Info ? kWhite : kMuted);
+  display_.drawTextCentered("cancel", 185, DisplayTextStyle::Small,
+                            model.selectedItem == RadialMenuItem::Cancel ? kWhite : kMuted);
+  display_.drawText("prev", 34, 124, DisplayTextStyle::Small,
+                    model.selectedItem == RadialMenuItem::PreviousPet ? kWhite : kMuted);
+  display_.drawText("next", 180, 124, DisplayTextStyle::Small,
+                    model.selectedItem == RadialMenuItem::NextPet ? kWhite : kMuted);
+  display_.drawTextCentered(radialItemLabel(model.selectedItem), 121, DisplayTextStyle::Small, kWhite);
+  if (!model.imuReady) {
+    display_.drawTextCentered("imu?", 141, DisplayTextStyle::Small, kAmber);
+  } else if (model.calibratingHint) {
+    display_.drawTextCentered("cal", 141, DisplayTextStyle::Small, kBlue);
+  }
+
+  drawRadialCursor(model.cursorX, model.cursorY, kWhite);
+}
+
+void ScreenRenderer::renderRadialCalibration(const RadialCalibrationModel &model) {
+  resetHomeCache();
+  display_.clear(kBlack);
+
+  drawRadialSector(270.0f, radialItemColor(RadialMenuItem::Cancel, false));
+  drawRadialSector(90.0f, radialItemColor(RadialMenuItem::Info, model.targetItem == RadialMenuItem::Info));
+  drawRadialSector(180.0f, radialItemColor(RadialMenuItem::PreviousPet,
+                                           model.targetItem == RadialMenuItem::PreviousPet));
+  drawRadialSector(0.0f, radialItemColor(RadialMenuItem::NextPet,
+                                         model.targetItem == RadialMenuItem::NextPet));
+
+  display_.drawLine(205, 35, 35, 205, kWhite);
+  display_.drawLine(35, 35, 205, 205, kWhite);
+  display_.drawCircle(kScreenCenter, kScreenCenter, 116, kLine);
+  display_.drawCircle(kScreenCenter, kScreenCenter, 76, kLine);
+  display_.fillCircle(kScreenCenter, kScreenCenter, 34, kBlack);
+  display_.drawCircle(kScreenCenter, kScreenCenter, 34, model.failed ? kRed : kBlue);
+
+  display_.drawTextCentered(model.failed ? "retry" : "cal", 108, DisplayTextStyle::Small,
+                            model.failed ? kRed : kBlue);
+  char stepText[12];
+  snprintf(stepText, sizeof(stepText), "%u/4", static_cast<unsigned>(model.completedCount));
+  display_.drawTextCentered(stepText, 127, DisplayTextStyle::Small, kWhite);
+  const int16_t progressWidth = static_cast<int16_t>(48.0f * model.holdProgress);
+  display_.drawRect(96, 143, 48, 5, kLine);
+  if (progressWidth > 0) {
+    display_.fillRect(96, 143, progressWidth, 5, model.failed ? kRed : kGreen);
+  }
+
+  drawRadialCursor(model.cursorX, model.cursorY, model.failed ? kRed : kWhite);
+}
+
 void ScreenRenderer::resetHomeCache() {
   homeChromeDrawn_ = false;
   lastHomeContentKind_ = HomeContentKind::None;
@@ -648,5 +718,69 @@ void ScreenRenderer::drawTinyBattery(int16_t x, int16_t y, uint8_t percent, uint
   display_.fillRect(x + 21, y + 3, 2, 3, kLine);
   if (fillWidth > 0) {
     display_.fillRect(x + 2, y + 2, fillWidth, 5, color);
+  }
+}
+
+void ScreenRenderer::drawRadialSector(float centerDeg, uint16_t color) {
+  const float startDeg = centerDeg - 44.0f;
+  const float endDeg = centerDeg + 44.0f;
+  for (float deg = startDeg; deg <= endDeg; deg += 2.0f) {
+    const float radians = deg * DEG_TO_RAD;
+    const int16_t x1 = kScreenCenter + static_cast<int16_t>(roundf(cosf(radians) * 34.0f));
+    const int16_t y1 = kScreenCenter - static_cast<int16_t>(roundf(sinf(radians) * 34.0f));
+    const int16_t x2 = kScreenCenter + static_cast<int16_t>(roundf(cosf(radians) * 116.0f));
+    const int16_t y2 = kScreenCenter - static_cast<int16_t>(roundf(sinf(radians) * 116.0f));
+    display_.drawLine(x1, y1, x2, y2, color);
+  }
+}
+
+void ScreenRenderer::drawRadialCursor(float cursorX, float cursorY, uint16_t color) {
+  const int16_t x = kScreenCenter + static_cast<int16_t>(roundf(cursorX));
+  const int16_t y = kScreenCenter + static_cast<int16_t>(roundf(cursorY));
+  display_.drawLine(kScreenCenter, kScreenCenter, x, y, color);
+  display_.fillCircle(x, y, 5, color);
+  display_.drawCircle(x, y, 8, kBlack);
+  display_.drawCircle(x, y, 9, color);
+}
+
+const char *ScreenRenderer::radialItemLabel(RadialMenuItem item) const {
+  switch (item) {
+    case RadialMenuItem::Info:
+      return "info";
+    case RadialMenuItem::PreviousPet:
+      return "prev pet";
+    case RadialMenuItem::NextPet:
+      return "next pet";
+    case RadialMenuItem::Cancel:
+    default:
+      return "cancel";
+  }
+}
+
+uint16_t ScreenRenderer::radialItemColor(RadialMenuItem item, bool selected) const {
+  if (!selected) {
+    switch (item) {
+      case RadialMenuItem::Info:
+        return 0x18C7;
+      case RadialMenuItem::PreviousPet:
+        return 0x120D;
+      case RadialMenuItem::NextPet:
+        return 0x1B46;
+      case RadialMenuItem::Cancel:
+      default:
+        return 0x28E3;
+    }
+  }
+
+  switch (item) {
+    case RadialMenuItem::Info:
+      return kBlue;
+    case RadialMenuItem::PreviousPet:
+      return 0x6D7F;
+    case RadialMenuItem::NextPet:
+      return kGreen;
+    case RadialMenuItem::Cancel:
+    default:
+      return kAmber;
   }
 }

@@ -30,7 +30,9 @@ private:
     Normal,
     StatusView,
     Sleeping,
-    ImuLocked
+    ImuLocked,
+    RadialMenu,
+    RadialCalibration
   };
 
   struct BatteryStatus {
@@ -43,6 +45,8 @@ private:
   void renderHomeText(const char *hintText);
   void renderHomeFrame();
   void renderStatus();
+  void renderRadialMenuFrame();
+  void renderRadialCalibrationFrame();
   void fillHomeModel(HomeScreenModel &model, const char *hintText);
   const char *currentHomeHint() const;
   bool isOffline(uint32_t now) const;
@@ -70,6 +74,19 @@ private:
   void loadScreenCalibration();
   bool saveScreenCalibration();
   void centerCube();
+  void loadRadialCalibration();
+  bool saveRadialCalibration(float angleOffsetDeg);
+  bool radialCursor(float &cursorX, float &cursorY, float &rawAngleDeg, float &mappedAngleDeg) const;
+  RadialMenuItem radialItemForAngle(float angleDeg) const;
+  void enterRadialMenu(uint32_t now);
+  void updateRadialMenu(uint32_t now);
+  void completeRadialMenu(uint32_t now);
+  void enterRadialCalibration(uint32_t now);
+  void updateRadialCalibration(uint32_t now);
+  bool finishRadialCalibration();
+  void resetRadialSpinTracking();
+  void updateRadialSpinTracking(float rawAngleDeg);
+  void triggerRadialItem(RadialMenuItem item, uint32_t now);
   void handleCompletedClick();
   void handleLongPress();
   void handleExtraLongPress();
@@ -106,6 +123,7 @@ private:
   uint32_t lastCubeThrowLogMs_ = 0;
   uint32_t lastCubeScaleUpdateMs_ = 0;
   uint32_t lastShortPressMs_ = 0;
+  uint32_t calibrationDwellStartMs_ = 0;
   uint32_t cubeScaleRecoverStartMs_ = 0;
   float cubeOffsetX_ = 0.0f;
   float cubeOffsetY_ = 0.0f;
@@ -120,5 +138,15 @@ private:
   float cubeSpinPitchVelocity_ = 0.0f;
   float cubeSpinYawVelocity_ = 0.0f;
   bool holdGestureConsumed_ = false;
+  bool radialCalibrated_ = false;
+  bool radialSpinTracking_ = false;
+  bool radialCalibrationFailed_ = false;
   uint8_t shortPressCount_ = 0;
+  uint8_t calibrationStep_ = 0;
+  RadialMenuItem radialSelectedItem_ = RadialMenuItem::Cancel;
+  RadialMenuItem calibrationTargetItem_ = RadialMenuItem::Info;
+  float radialAngleOffsetDeg_ = 0.0f;
+  float radialSpinPreviousAngleDeg_ = 0.0f;
+  float radialSpinAccumulatedDeg_ = 0.0f;
+  float calibrationRawAngles_[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 };

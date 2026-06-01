@@ -6,6 +6,7 @@ class PetState {
 public:
   void reset();
   void advancePet();
+  void previousPet();
   void wakeForLongPress();
 
   const char *currentPetText() const;

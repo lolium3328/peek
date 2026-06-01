@@ -11,6 +11,8 @@ public:
   void renderHome(const HomeScreenModel &model);
   void renderHomeFrame(const HomeScreenModel &model);
   void renderStatus(const StatusScreenModel &model);
+  void renderRadialMenu(const RadialMenuModel &model);
+  void renderRadialCalibration(const RadialCalibrationModel &model);
 
 private:
   enum class HomeContentKind {
@@ -40,6 +42,10 @@ private:
   void drawBottomHint(const char *hintText);
   void drawStatusPill(int16_t x, int16_t y, const char *text, uint16_t color);
   void drawTinyBattery(int16_t x, int16_t y, uint8_t percent, uint16_t color);
+  void drawRadialSector(float centerDeg, uint16_t color);
+  void drawRadialCursor(float cursorX, float cursorY, uint16_t color);
+  const char *radialItemLabel(RadialMenuItem item) const;
+  uint16_t radialItemColor(RadialMenuItem item, bool selected) const;
 
   DisplayDriver &display_;
   bool homeChromeDrawn_ = false;

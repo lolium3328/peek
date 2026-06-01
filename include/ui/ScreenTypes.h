@@ -42,3 +42,27 @@ struct StatusScreenModel {
   float imuRollDeg = 0.0f;
   float imuPitchDeg = 0.0f;
 };
+
+enum class RadialMenuItem : uint8_t {
+  Cancel = 0,
+  Info = 1,
+  PreviousPet = 2,
+  NextPet = 3
+};
+
+struct RadialMenuModel {
+  RadialMenuItem selectedItem = RadialMenuItem::Cancel;
+  float cursorX = 0.0f;
+  float cursorY = 0.0f;
+  bool imuReady = false;
+  bool calibratingHint = false;
+};
+
+struct RadialCalibrationModel {
+  RadialMenuItem targetItem = RadialMenuItem::Info;
+  uint8_t completedCount = 0;
+  float cursorX = 0.0f;
+  float cursorY = 0.0f;
+  float holdProgress = 0.0f;
+  bool failed = false;
+};

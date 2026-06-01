@@ -22,6 +22,11 @@ void PetState::advancePet() {
   sleeping_ = false;
 }
 
+void PetState::previousPet() {
+  currentPetIndex_ = currentPetIndex_ == 0 ? kPetCount - 1 : currentPetIndex_ - 1;
+  sleeping_ = false;
+}
+
 void PetState::wakeForLongPress() {
   sleeping_ = false;
 }
