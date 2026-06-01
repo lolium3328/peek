@@ -141,6 +141,7 @@ private:
   float cubeSpinYawVelocity_ = 0.0f;
   bool holdGestureConsumed_ = false;
   bool radialCalibrated_ = false;
+  bool radialAwaitingInitialRelease_ = false;
   bool radialSpinTracking_ = false;
   bool radialCalibrationFailed_ = false;
   uint8_t shortPressCount_ = 0;

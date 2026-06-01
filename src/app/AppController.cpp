@@ -16,7 +16,6 @@ constexpr uint32_t kShortPressSequenceGapMs = 1500;
 constexpr uint8_t kImuLockShortPressCount = 4;
 constexpr float kRadialCursorGain = 3.0f;
 constexpr float kRadialCursorRadius = 92.0f;
-constexpr float kRadialCalibrationMinTurnDeg = 330.0f;
 constexpr float kRadialYawMix = 0.35f;
 constexpr float kRadialAdjacentMinDeg = 50.0f;
 constexpr float kRadialAdjacentMaxDeg = 130.0f;
@@ -214,8 +213,25 @@ void AppController::loop() {
 
   if (mode_ == AppMode::RadialMenu) {
     updateRadialMenu(now);
-    if (releasedNow) {
+    if (releasedNow && radialAwaitingInitialRelease_) {
+      radialAwaitingInitialRelease_ = false;
+      holdGestureConsumed_ = false;
+      resetMotionBaseline();
+      return;
+    }
+    if (event.type == TouchEventType::ShortPress) {
+      enterRadialCalibration(now);
+      holdGestureConsumed_ = false;
+      resetMotionBaseline();
+      return;
+    }
+    if (event.type == TouchEventType::LongPress || event.type == TouchEventType::ExtraLongPress) {
       completeRadialMenu(now);
+      holdGestureConsumed_ = true;
+      resetMotionBaseline();
+      return;
+    }
+    if (releasedNow) {
       holdGestureConsumed_ = false;
       resetMotionBaseline();
     }
@@ -1110,6 +1126,7 @@ void AppController::renderRadialCalibrationFrame() {
 void AppController::enterRadialMenu(uint32_t now) {
   mode_ = AppMode::RadialMenu;
   radialSelectedItem_ = RadialMenuItem::Cancel;
+  radialAwaitingInitialRelease_ = touch_.isPressed();
   holdGestureConsumed_ = false;
   resetShortPressSequence();
   resetMotionBaseline();
@@ -1128,11 +1145,6 @@ void AppController::updateRadialMenu(uint32_t now) {
   const bool ready = radialCursor(cursorX, cursorY, rawAngleDeg, mappedAngleDeg);
   if (ready) {
     radialSelectedItem_ = radialItemForAngle(mappedAngleDeg);
-    updateRadialSpinTracking(rawAngleDeg);
-    if (fabsf(radialSpinAccumulatedDeg_) >= kRadialCalibrationMinTurnDeg) {
-      enterRadialCalibration(now);
-      return;
-    }
   }
 
   if (now - lastHomeRenderMs_ >= kHomeFrameIntervalMs) {
@@ -1143,6 +1155,7 @@ void AppController::updateRadialMenu(uint32_t now) {
 void AppController::completeRadialMenu(uint32_t now) {
   const RadialMenuItem selected = radialSelectedItem_;
   mode_ = AppMode::Normal;
+  radialAwaitingInitialRelease_ = false;
   resetRadialSpinTracking();
   recordActivity(now);
   triggerRadialItem(selected, now);
@@ -1150,6 +1163,7 @@ void AppController::completeRadialMenu(uint32_t now) {
 
 void AppController::enterRadialCalibration(uint32_t now) {
   mode_ = AppMode::RadialCalibration;
+  radialAwaitingInitialRelease_ = false;
   calibrationStep_ = 0;
   calibrationTargetItem_ = RadialMenuItem::Info;
   radialCalibrationFailed_ = false;
