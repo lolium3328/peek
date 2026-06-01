@@ -62,6 +62,19 @@ bool DisplayDriver::begin() {
   return gfx_->begin();
 }
 
+void DisplayDriver::setSleep(bool sleeping) {
+  if (sleeping_ == sleeping) {
+    return;
+  }
+
+  sleeping_ = sleeping;
+  if (sleeping_) {
+    gfx_->displayOff();
+  } else {
+    gfx_->displayOn();
+  }
+}
+
 void DisplayDriver::clear(uint16_t color) {
   gfx_->fillScreen(color);
 }

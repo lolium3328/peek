@@ -14,6 +14,7 @@ struct DeviceConfig {
   uint32_t longPressMs = 2000;
   uint32_t extraLongPressMs = 5000;
   uint32_t sleepTimeoutMs = 120000;
+  uint32_t wakeMotionThreshold = 6000;
   String longPressText = "good touch!";
 };
 

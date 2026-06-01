@@ -26,10 +26,37 @@ public:
   void loop();
 
 private:
+  enum class AppMode {
+    Normal,
+    StatusView,
+    Sleeping,
+    ImuLocked
+  };
+
+  struct BatteryStatus {
+    bool available = false;
+    uint8_t percent = 92;
+    bool low = false;
+  };
+
   void resetPet();
   void renderHomeText(const char *hintText);
   void renderHomeFrame();
   void renderStatus();
+  void fillHomeModel(HomeScreenModel &model, const char *hintText);
+  const char *currentHomeHint() const;
+  bool isOffline(uint32_t now) const;
+  const BatteryStatus &localBattery() const;
+  bool isLowBattery() const;
+  void recordActivity(uint32_t now);
+  bool readMotionDelta(int32_t &deltaX, int32_t &deltaY, int32_t &deltaZ);
+  bool detectWakeMotion(uint32_t now);
+  void enterSleep(uint32_t now);
+  void wakeFromSleep(uint32_t now);
+  void enterImuLocked(uint32_t now);
+  void exitImuLocked(uint32_t now);
+  bool updateShortPressSequence(uint32_t now);
+  void resetShortPressSequence();
   void updateCubeThrow(uint32_t now);
   void updateCubeScale(uint32_t now);
   void startCubeRecovery(uint32_t now);
@@ -60,7 +87,9 @@ private:
   TouchSensor touch_;
   ImuDriver imu_;
   PetState pet_;
-  uint32_t lastTouchMs_ = 0;
+  AppMode mode_ = AppMode::Normal;
+  BatteryStatus localBattery_;
+  uint32_t lastActivityMs_ = 0;
   uint32_t lastHomeRenderMs_ = 0;
   float cubeRollZeroDeg_ = 0.0f;
   float cubePitchZeroDeg_ = 0.0f;
@@ -76,6 +105,7 @@ private:
   uint32_t lastPetGestureMs_ = 0;
   uint32_t lastCubeThrowLogMs_ = 0;
   uint32_t lastCubeScaleUpdateMs_ = 0;
+  uint32_t shortPressWindowStartMs_ = 0;
   uint32_t cubeScaleRecoverStartMs_ = 0;
   float cubeOffsetX_ = 0.0f;
   float cubeOffsetY_ = 0.0f;
@@ -90,5 +120,5 @@ private:
   float cubeSpinPitchVelocity_ = 0.0f;
   float cubeSpinYawVelocity_ = 0.0f;
   bool holdGestureConsumed_ = false;
-  bool statusVisible_ = false;
+  uint8_t shortPressCount_ = 0;
 };

@@ -15,6 +15,7 @@ public:
   DisplayDriver();
 
   bool begin();
+  void setSleep(bool sleeping);
   void clear(uint16_t color);
   void drawTextCentered(const char *text);
   void drawTextCentered(const char *text, int16_t centerY, DisplayTextStyle style, uint16_t color);
@@ -39,6 +40,7 @@ private:
 
   Arduino_DataBus *bus_;
   Arduino_GFX *gfx_;
+  bool sleeping_ = false;
   uint8_t leftBatteryPercent_ = 92;
   uint8_t rightBatteryPercent_ = 79;
 };

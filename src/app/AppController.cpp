@@ -12,6 +12,8 @@ constexpr uint32_t kHomeFrameIntervalMs = 75;
 constexpr uint32_t kThrowCooldownMs = 900;
 constexpr uint32_t kThrowMinSettleMs = 1400;
 constexpr uint32_t kThrowLogIntervalMs = 200;
+constexpr uint32_t kShortPressSequenceWindowMs = 1200;
+constexpr uint8_t kImuLockShortPressCount = 4;
 constexpr int32_t kThrowAccelDeltaThreshold = 7200;
 constexpr float kCubeNormalScale = 32.0f;
 constexpr float kCubeThrownScale = 18.0f;
@@ -124,7 +126,7 @@ void AppController::begin() {
 
   Serial.println("Button input start");
   resetPet();
-  lastTouchMs_ = millis();
+  lastActivityMs_ = millis();
 }
 
 void AppController::loop() {
@@ -137,7 +139,8 @@ void AppController::loop() {
   imu_.update(now);
 
   if (provisioningActive) {
-    statusVisible_ = false;
+    mode_ = AppMode::Normal;
+    display_.setSleep(false);
     holdGestureConsumed_ = false;
     resetMotionBaseline();
     if (now - lastHomeRenderMs_ >= kHomeFrameIntervalMs) {
@@ -149,12 +152,6 @@ void AppController::loop() {
   if (!provisioningActive) {
     backend_.loop(now, network_, imu_.pose(), imu_.isReady());
   }
-  updateCubeThrow(now);
-  updateCubeScale(now);
-
-  if (!statusVisible_ && (now - lastHomeRenderMs_ >= kHomeFrameIntervalMs)) {
-    renderHomeFrame();
-  }
 
   const TouchEvent event = touch_.update(now);
   const bool releasedNow = event.sampled && !event.pressed;
@@ -163,23 +160,38 @@ void AppController::loop() {
     Serial.println(event.pressed ? "down" : "up");
 
     if (event.pressed) {
-      lastTouchMs_ = now;
+      recordActivity(now);
       resetMotionBaseline();
     }
   }
 
-  detectHeldPetGesture(now);
-  detectCubeThrow(now);
+  if (mode_ == AppMode::Sleeping) {
+    if (event.sampled && event.pressed) {
+      wakeFromSleep(now);
+    } else if (detectWakeMotion(now)) {
+      wakeFromSleep(now);
+    }
+    return;
+  }
+
+  if (mode_ != AppMode::ImuLocked) {
+    updateCubeThrow(now);
+    updateCubeScale(now);
+    detectHeldPetGesture(now);
+    detectCubeThrow(now);
+  }
 
   if (event.sampled && !holdGestureConsumed_) {
     if (event.type == TouchEventType::ExtraLongPress) {
-      lastTouchMs_ = now;
+      recordActivity(now);
+      resetShortPressSequence();
       handleExtraLongPress();
     } else if (event.type == TouchEventType::LongPress) {
-      lastTouchMs_ = now;
+      recordActivity(now);
+      resetShortPressSequence();
       handleLongPress();
     } else if (event.type == TouchEventType::ShortPress) {
-      lastTouchMs_ = now;
+      recordActivity(now);
       handleCompletedClick();
     }
   }
@@ -189,65 +201,48 @@ void AppController::loop() {
     resetMotionBaseline();
   }
 
-  if (!pet_.isSleeping() && !touch_.isPressed() && (now - lastTouchMs_ >= config_.sleepTimeoutMs)) {
-    resetPet();
-    Serial.println("Sleep timeout -> cube pet");
+  if (mode_ == AppMode::StatusView
+      && !touch_.isPressed()
+      && config_.sleepTimeoutMs > 0
+      && now - lastActivityMs_ >= config_.sleepTimeoutMs) {
+    enterSleep(now);
+    return;
+  }
+
+  if (mode_ == AppMode::StatusView) {
+    return;
+  }
+
+  if (mode_ == AppMode::ImuLocked) {
+    return;
+  }
+
+  if (now - lastHomeRenderMs_ >= kHomeFrameIntervalMs) {
+    renderHomeFrame();
+  }
+
+  if (!touch_.isPressed() && config_.sleepTimeoutMs > 0 && now - lastActivityMs_ >= config_.sleepTimeoutMs) {
+    enterSleep(now);
   }
 }
 
 void AppController::resetPet() {
   pet_.reset();
-  statusVisible_ = false;
+  mode_ = AppMode::Normal;
+  display_.setSleep(false);
   renderHomeText(pet_.isSleeping() ? "sleeping" : "hold + shake");
 }
 
 void AppController::renderHomeText(const char *hintText) {
-  const ImuPose &pose = imu_.pose();
   HomeScreenModel model;
-  model.primaryText = provisioning_.isActive()
-                          ? "setup"
-                          : (pet_.isCubePet() ? (pose.valid ? "" : "imu?") : pet_.currentPetText());
-  model.hintText = provisioning_.isActive() ? provisioning_.apSsid().c_str() : hintText;
-  model.localWeather = "--";
-  model.peerWeather = "--";
-  model.localBatteryPercent = 92;
-  model.peerBatteryPercent = 79;
-  model.wifiConnected = network_.isConnected();
-  model.backendConnected = !provisioning_.isActive() && backend_.isConnected(millis());
-  model.poseAlert = false;
-  if (!provisioning_.isActive()) {
-    applyCubeMotion(model, pose);
-  }
-  if (pet_.isPet2() && assetStore_.hasPet2Animation()) {
-    model.petAnimationVisible = true;
-    model.petAnimationPath = assetStore_.pet2AnimationPath().c_str();
-  }
+  fillHomeModel(model, hintText);
   screen_.renderHome(model);
   lastHomeRenderMs_ = millis();
 }
 
 void AppController::renderHomeFrame() {
-  const ImuPose &pose = imu_.pose();
   HomeScreenModel model;
-  model.primaryText = provisioning_.isActive()
-                          ? "setup"
-                          : (pet_.isCubePet() ? (pose.valid ? "" : "imu?") : pet_.currentPetText());
-  model.hintText = provisioning_.isActive()
-                       ? provisioning_.apSsid().c_str()
-                       : (touch_.isPressed() ? "gesture" : (pet_.isSleeping() ? "sleeping" : "hold + shake"));
-  model.localWeather = "--";
-  model.peerWeather = "--";
-  model.localBatteryPercent = 92;
-  model.peerBatteryPercent = 79;
-  model.wifiConnected = network_.isConnected();
-  model.backendConnected = !provisioning_.isActive() && backend_.isConnected(millis());
-  if (!provisioning_.isActive()) {
-    applyCubeMotion(model, pose);
-  }
-  if (pet_.isPet2() && assetStore_.hasPet2Animation()) {
-    model.petAnimationVisible = true;
-    model.petAnimationPath = assetStore_.pet2AnimationPath().c_str();
-  }
+  fillHomeModel(model, currentHomeHint());
   if (cubeThrown_) {
     screen_.renderHome(model);
   } else {
@@ -261,7 +256,7 @@ void AppController::renderStatus() {
   StatusScreenModel model;
   model.buttonPressed = touch_.isPressed();
   model.wifiRssi = static_cast<int8_t>(network_.rssi());
-  model.localBatteryPercent = 92;
+  model.localBatteryPercent = localBattery().percent;
   model.peerBatteryPercent = 79;
   model.backendConnected = !provisioning_.isActive() && backend_.isConnected(millis());
   model.imuReady = imu_.isReady();
@@ -270,6 +265,168 @@ void AppController::renderStatus() {
   model.imuRollDeg = pose.rollDeg;
   model.imuPitchDeg = pose.pitchDeg;
   screen_.renderStatus(model);
+}
+
+void AppController::fillHomeModel(HomeScreenModel &model, const char *hintText) {
+  const uint32_t now = millis();
+  const ImuPose &pose = imu_.pose();
+  model.primaryText = provisioning_.isActive()
+                          ? "setup"
+                          : (mode_ == AppMode::ImuLocked
+                                 ? "imu?"
+                                 : (pet_.isCubePet() ? (pose.valid ? "" : "imu?") : pet_.currentPetText()));
+  model.hintText = provisioning_.isActive()
+                       ? provisioning_.apSsid().c_str()
+                       : ((mode_ == AppMode::Normal)
+                              ? (isLowBattery() ? "low battery" : (isOffline(now) ? "offline" : hintText))
+                              : hintText);
+  model.localWeather = "--";
+  model.peerWeather = "--";
+  model.localBatteryPercent = localBattery().percent;
+  model.peerBatteryPercent = 79;
+  model.wifiConnected = network_.isConnected();
+  model.backendConnected = !provisioning_.isActive() && backend_.isConnected(now);
+  model.poseAlert = isLowBattery();
+  if (!provisioning_.isActive() && mode_ != AppMode::ImuLocked) {
+    applyCubeMotion(model, pose);
+  }
+  if (mode_ != AppMode::ImuLocked && pet_.isPet2() && assetStore_.hasPet2Animation()) {
+    model.petAnimationVisible = true;
+    model.petAnimationPath = assetStore_.pet2AnimationPath().c_str();
+  }
+}
+
+const char *AppController::currentHomeHint() const {
+  if (mode_ == AppMode::ImuLocked) {
+    return "imu locked";
+  }
+  if (touch_.isPressed()) {
+    return "gesture";
+  }
+  return pet_.isSleeping() ? "sleeping" : "hold + shake";
+}
+
+bool AppController::isOffline(uint32_t now) const {
+  if (provisioning_.isActive()) {
+    return false;
+  }
+  const bool wifiOffline = network_.isEnabled() && !network_.isConnected();
+  const bool backendOffline = backend_.isEnabled() && !backend_.isConnected(now);
+  return wifiOffline || backendOffline;
+}
+
+const AppController::BatteryStatus &AppController::localBattery() const {
+  return localBattery_;
+}
+
+bool AppController::isLowBattery() const {
+  return localBattery_.available && localBattery_.low;
+}
+
+void AppController::recordActivity(uint32_t now) {
+  lastActivityMs_ = now;
+}
+
+bool AppController::readMotionDelta(int32_t &deltaX, int32_t &deltaY, int32_t &deltaZ) {
+  if (!imu_.lastSample().valid) {
+    return false;
+  }
+
+  const ImuSample &sample = imu_.lastSample();
+  if (!hasMotionBaseline_) {
+    previousAccelX_ = sample.accelX;
+    previousAccelY_ = sample.accelY;
+    previousAccelZ_ = sample.accelZ;
+    hasMotionBaseline_ = true;
+    return false;
+  }
+
+  deltaX = static_cast<int32_t>(sample.accelX) - previousAccelX_;
+  deltaY = static_cast<int32_t>(sample.accelY) - previousAccelY_;
+  deltaZ = static_cast<int32_t>(sample.accelZ) - previousAccelZ_;
+  previousAccelX_ = sample.accelX;
+  previousAccelY_ = sample.accelY;
+  previousAccelZ_ = sample.accelZ;
+  return true;
+}
+
+bool AppController::detectWakeMotion(uint32_t now) {
+  int32_t deltaX = 0;
+  int32_t deltaY = 0;
+  int32_t deltaZ = 0;
+  if (!readMotionDelta(deltaX, deltaY, deltaZ)) {
+    return false;
+  }
+
+  const int32_t motion = labs(deltaX) + labs(deltaY) + labs(deltaZ);
+  if (motion < static_cast<int32_t>(config_.wakeMotionThreshold)) {
+    return false;
+  }
+
+  recordActivity(now);
+  Serial.print("Wake motion ");
+  Serial.println(motion);
+  return true;
+}
+
+void AppController::enterSleep(uint32_t now) {
+  mode_ = AppMode::Sleeping;
+  holdGestureConsumed_ = false;
+  resetShortPressSequence();
+  stopCubeThrow();
+  resetMotionBaseline();
+  renderHomeText("sleeping");
+  display_.setSleep(true);
+  Serial.print("Sleep timeout at ");
+  Serial.println(now);
+}
+
+void AppController::wakeFromSleep(uint32_t now) {
+  display_.setSleep(false);
+  mode_ = AppMode::Normal;
+  recordActivity(now);
+  resetMotionBaseline();
+  renderHomeText(currentHomeHint());
+  Serial.println("Wake -> normal");
+}
+
+void AppController::enterImuLocked(uint32_t now) {
+  mode_ = AppMode::ImuLocked;
+  holdGestureConsumed_ = false;
+  resetShortPressSequence();
+  stopCubeThrow();
+  resetMotionBaseline();
+  recordActivity(now);
+  renderHomeText("imu locked");
+  Serial.println("IMU input locked");
+}
+
+void AppController::exitImuLocked(uint32_t now) {
+  mode_ = AppMode::Normal;
+  resetShortPressSequence();
+  resetMotionBaseline();
+  recordActivity(now);
+  renderHomeText("imu restored");
+  Serial.println("IMU input restored");
+}
+
+bool AppController::updateShortPressSequence(uint32_t now) {
+  if (shortPressWindowStartMs_ == 0 || now - shortPressWindowStartMs_ > kShortPressSequenceWindowMs) {
+    shortPressWindowStartMs_ = now;
+    shortPressCount_ = 0;
+  }
+
+  ++shortPressCount_;
+  if (shortPressCount_ >= kImuLockShortPressCount) {
+    enterImuLocked(now);
+    return true;
+  }
+  return false;
+}
+
+void AppController::resetShortPressSequence() {
+  shortPressWindowStartMs_ = 0;
+  shortPressCount_ = 0;
 }
 
 void AppController::updateCubeScale(uint32_t now) {
@@ -464,25 +621,16 @@ void AppController::updateCubeRecovery(uint32_t now, float dt, float frameScale)
 }
 
 void AppController::detectHeldPetGesture(uint32_t now) {
-  if (holdGestureConsumed_ || !touch_.isPressed() || !imu_.lastSample().valid) {
+  if (mode_ != AppMode::Normal || holdGestureConsumed_ || !touch_.isPressed()) {
     return;
   }
 
-  const ImuSample &sample = imu_.lastSample();
-  if (!hasMotionBaseline_) {
-    previousAccelX_ = sample.accelX;
-    previousAccelY_ = sample.accelY;
-    previousAccelZ_ = sample.accelZ;
-    hasMotionBaseline_ = true;
+  int32_t accelDeltaX = 0;
+  int32_t accelDeltaY = 0;
+  int32_t accelDeltaZ = 0;
+  if (!readMotionDelta(accelDeltaX, accelDeltaY, accelDeltaZ)) {
     return;
   }
-
-  const int32_t accelDeltaX = static_cast<int32_t>(sample.accelX) - previousAccelX_;
-  const int32_t accelDeltaY = static_cast<int32_t>(sample.accelY) - previousAccelY_;
-  const int32_t accelDeltaZ = static_cast<int32_t>(sample.accelZ) - previousAccelZ_;
-  previousAccelX_ = sample.accelX;
-  previousAccelY_ = sample.accelY;
-  previousAccelZ_ = sample.accelZ;
 
   const int32_t motion = labs(accelDeltaX) + labs(accelDeltaY) + labs(accelDeltaZ);
   if (motion < kThrowAccelDeltaThreshold || now - lastPetGestureMs_ < kThrowCooldownMs) {
@@ -491,8 +639,7 @@ void AppController::detectHeldPetGesture(uint32_t now) {
 
   pet_.advancePet();
   holdGestureConsumed_ = true;
-  statusVisible_ = false;
-  lastTouchMs_ = now;
+  recordActivity(now);
   lastPetGestureMs_ = now;
   stopCubeThrow();
   renderHomeText("switched");
@@ -504,31 +651,23 @@ void AppController::detectHeldPetGesture(uint32_t now) {
 }
 
 void AppController::detectCubeThrow(uint32_t now) {
-  if (touch_.isPressed() || statusVisible_ || !pet_.isCubePet() || !imu_.lastSample().valid) {
+  if (mode_ != AppMode::Normal || touch_.isPressed() || !pet_.isCubePet()) {
     return;
   }
 
-  const ImuSample &sample = imu_.lastSample();
-  if (!hasMotionBaseline_) {
-    previousAccelX_ = sample.accelX;
-    previousAccelY_ = sample.accelY;
-    previousAccelZ_ = sample.accelZ;
-    hasMotionBaseline_ = true;
+  int32_t accelDeltaX = 0;
+  int32_t accelDeltaY = 0;
+  int32_t accelDeltaZ = 0;
+  if (!readMotionDelta(accelDeltaX, accelDeltaY, accelDeltaZ)) {
     return;
   }
-
-  const int32_t accelDeltaX = static_cast<int32_t>(sample.accelX) - previousAccelX_;
-  const int32_t accelDeltaY = static_cast<int32_t>(sample.accelY) - previousAccelY_;
-  const int32_t accelDeltaZ = static_cast<int32_t>(sample.accelZ) - previousAccelZ_;
-  previousAccelX_ = sample.accelX;
-  previousAccelY_ = sample.accelY;
-  previousAccelZ_ = sample.accelZ;
 
   const int32_t motion = labs(accelDeltaX) + labs(accelDeltaY) + labs(accelDeltaZ);
   if (motion < kThrowAccelDeltaThreshold || now - lastCubeThrowStartMs_ < kThrowCooldownMs) {
     return;
   }
 
+  recordActivity(now);
   startCubeThrow(now, accelDeltaX, accelDeltaY, accelDeltaZ);
 }
 
@@ -730,7 +869,25 @@ void AppController::centerCube() {
 }
 
 void AppController::handleCompletedClick() {
-  statusVisible_ = false;
+  const uint32_t now = millis();
+  if (mode_ == AppMode::ImuLocked) {
+    exitImuLocked(now);
+    return;
+  }
+
+  if (mode_ == AppMode::StatusView) {
+    mode_ = AppMode::Normal;
+    resetShortPressSequence();
+    resetMotionBaseline();
+    renderHomeText(currentHomeHint());
+    Serial.println("Short press -> exit status");
+    return;
+  }
+
+  if (updateShortPressSequence(now)) {
+    return;
+  }
+
   centerCube();
   renderHomeText("centered");
 
@@ -738,7 +895,12 @@ void AppController::handleCompletedClick() {
 }
 
 void AppController::handleLongPress() {
-  statusVisible_ = true;
+  if (mode_ == AppMode::ImuLocked) {
+    return;
+  }
+
+  mode_ = AppMode::StatusView;
+  resetShortPressSequence();
   pet_.wakeForLongPress();
   renderStatus();
 
@@ -746,7 +908,12 @@ void AppController::handleLongPress() {
 }
 
 void AppController::handleExtraLongPress() {
-  statusVisible_ = false;
+  if (mode_ == AppMode::ImuLocked) {
+    return;
+  }
+
+  mode_ = AppMode::Normal;
+  resetShortPressSequence();
   const bool saved = saveScreenCalibration();
   renderHomeText(saved ? "cal saved" : "cal failed");
 
