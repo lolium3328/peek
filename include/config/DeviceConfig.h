@@ -8,6 +8,7 @@ struct DeviceConfig {
   String deviceToken = "";
   String wifiSsid = "";
   String wifiPassword = "";
+  String wifiUsername = "";
   String backendUrl = "";
   uint32_t backendPollIntervalMs = 5000;
   uint32_t touchSampleIntervalMs = 50;

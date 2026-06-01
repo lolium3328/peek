@@ -10,6 +10,7 @@ constexpr const char *kKeyDeviceId = "deviceId";
 constexpr const char *kKeyDeviceToken = "deviceToken";
 constexpr const char *kKeyWifiSsid = "wifiSsid";
 constexpr const char *kKeyWifiPassword = "wifiPassword";
+constexpr const char *kKeyWifiUsername = "wifiUsername";
 constexpr const char *kKeyBackendUrl = "backendUrl";
 constexpr const char *kKeyBackendPollMs = "backendPollMs";
 constexpr const char *kKeyTouchSampleMs = "touchSampleMs";
@@ -39,6 +40,7 @@ DeviceConfig ConfigStore::load() const {
   config.deviceToken = getStringValue(kKeyDeviceToken, config.deviceToken);
   config.wifiSsid = getStringValue(kKeyWifiSsid, config.wifiSsid);
   config.wifiPassword = getStringValue(kKeyWifiPassword, config.wifiPassword);
+  config.wifiUsername = getStringValue(kKeyWifiUsername, config.wifiUsername);
   config.backendUrl = getStringValue(kKeyBackendUrl, config.backendUrl);
   config.backendPollIntervalMs = getUIntValue(kKeyBackendPollMs, config.backendPollIntervalMs);
   config.touchSampleIntervalMs = getUIntValue(kKeyTouchSampleMs, config.touchSampleIntervalMs);
@@ -69,6 +71,7 @@ bool ConfigStore::save(const DeviceConfig &config) {
   prefs.putString(kKeyDeviceToken, config.deviceToken);
   prefs.putString(kKeyWifiSsid, config.wifiSsid);
   prefs.putString(kKeyWifiPassword, config.wifiPassword);
+  prefs.putString(kKeyWifiUsername, config.wifiUsername);
   prefs.putString(kKeyBackendUrl, config.backendUrl);
   prefs.putUInt(kKeyBackendPollMs, config.backendPollIntervalMs);
   prefs.putUInt(kKeyTouchSampleMs, config.touchSampleIntervalMs);

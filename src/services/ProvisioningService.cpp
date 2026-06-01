@@ -121,6 +121,7 @@ void ProvisioningService::handleSave() {
   DeviceConfig next = *config_;
   next.wifiSsid = server_.arg("wifiSsid");
   next.wifiPassword = server_.arg("wifiPassword");
+  next.wifiUsername = server_.arg("wifiUsername");
   next.backendUrl = server_.arg("backendUrl");
   next.deviceId = server_.arg("deviceId");
   next.deviceToken = server_.arg("deviceToken");
@@ -128,6 +129,7 @@ void ProvisioningService::handleSave() {
       boundedUInt(server_.arg("backendPollIntervalMs"), next.backendPollIntervalMs, 1000, 600000);
 
   next.wifiSsid.trim();
+  next.wifiUsername.trim();
   next.backendUrl.trim();
   next.deviceId.trim();
   next.deviceToken.trim();
@@ -185,6 +187,8 @@ String ProvisioningService::htmlPage() const {
             "<form method=\"post\" action=\"/api/config\">");
   html += F("<label>Wi-Fi SSID<input name=\"wifiSsid\" required autocomplete=\"off\"></label>");
   html += F("<label>Wi-Fi Password<input name=\"wifiPassword\" type=\"password\" autocomplete=\"off\"></label>");
+  html += F("<label>Wi-Fi Username (for Enterprise/PEAP, leave blank for home Wi-Fi)"
+            "<input name=\"wifiUsername\" autocomplete=\"off\" placeholder=\"user@domain\"></label>");
   html += F("<label>Backend URL<input name=\"backendUrl\" inputmode=\"url\" value=\"");
   html += backendUrl;
   html += F("\" placeholder=\"http://server:3001\"></label>");
@@ -203,6 +207,7 @@ String ProvisioningService::jsonConfig() const {
   if (config_) {
     doc["deviceId"] = config_->deviceId;
     doc["wifiSsid"] = config_->wifiSsid;
+    doc["wifiUsername"] = config_->wifiUsername;
     doc["backendUrl"] = config_->backendUrl;
     doc["backendPollIntervalMs"] = config_->backendPollIntervalMs;
   }
