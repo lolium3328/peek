@@ -105,7 +105,7 @@ private:
   uint32_t lastPetGestureMs_ = 0;
   uint32_t lastCubeThrowLogMs_ = 0;
   uint32_t lastCubeScaleUpdateMs_ = 0;
-  uint32_t shortPressWindowStartMs_ = 0;
+  uint32_t lastShortPressMs_ = 0;
   uint32_t cubeScaleRecoverStartMs_ = 0;
   float cubeOffsetX_ = 0.0f;
   float cubeOffsetY_ = 0.0f;

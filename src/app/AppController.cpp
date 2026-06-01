@@ -12,7 +12,7 @@ constexpr uint32_t kHomeFrameIntervalMs = 75;
 constexpr uint32_t kThrowCooldownMs = 900;
 constexpr uint32_t kThrowMinSettleMs = 1400;
 constexpr uint32_t kThrowLogIntervalMs = 200;
-constexpr uint32_t kShortPressSequenceWindowMs = 1200;
+constexpr uint32_t kShortPressSequenceGapMs = 1500;
 constexpr uint8_t kImuLockShortPressCount = 4;
 constexpr int32_t kThrowAccelDeltaThreshold = 7200;
 constexpr float kCubeNormalScale = 32.0f;
@@ -411,12 +411,14 @@ void AppController::exitImuLocked(uint32_t now) {
 }
 
 bool AppController::updateShortPressSequence(uint32_t now) {
-  if (shortPressWindowStartMs_ == 0 || now - shortPressWindowStartMs_ > kShortPressSequenceWindowMs) {
-    shortPressWindowStartMs_ = now;
+  if (lastShortPressMs_ == 0 || now - lastShortPressMs_ > kShortPressSequenceGapMs) {
     shortPressCount_ = 0;
   }
 
+  lastShortPressMs_ = now;
   ++shortPressCount_;
+  Serial.print("Short press sequence ");
+  Serial.println(shortPressCount_);
   if (shortPressCount_ >= kImuLockShortPressCount) {
     enterImuLocked(now);
     return true;
@@ -425,7 +427,7 @@ bool AppController::updateShortPressSequence(uint32_t now) {
 }
 
 void AppController::resetShortPressSequence() {
-  shortPressWindowStartMs_ = 0;
+  lastShortPressMs_ = 0;
   shortPressCount_ = 0;
 }
 
