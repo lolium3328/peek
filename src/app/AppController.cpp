@@ -243,11 +243,7 @@ void AppController::renderHomeText(const char *hintText) {
 void AppController::renderHomeFrame() {
   HomeScreenModel model;
   fillHomeModel(model, currentHomeHint());
-  if (cubeThrown_) {
-    screen_.renderHome(model);
-  } else {
-    screen_.renderHomeFrame(model);
-  }
+  screen_.renderHomeFrame(model);
   lastHomeRenderMs_ = millis();
 }
 
