@@ -59,7 +59,7 @@ DisplayDriver::DisplayDriver()
           240)) {}
 
 bool DisplayDriver::begin() {
-  return gfx_->begin();
+  return gfx_->begin(80000000);
 }
 
 void DisplayDriver::setSleep(bool sleeping) {

@@ -143,6 +143,7 @@ void AppController::loop() {
     display_.setSleep(false);
     holdGestureConsumed_ = false;
     resetMotionBaseline();
+    recordActivity(now);
     if (now - lastHomeRenderMs_ >= kHomeFrameIntervalMs) {
       renderHomeFrame();
     }
