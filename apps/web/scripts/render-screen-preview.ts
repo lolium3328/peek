@@ -7,8 +7,9 @@ import { deflateSync } from "node:zlib";
 import { glcdFont } from "../src/glcdfont";
 import type { AppSnapshot } from "../src/shared";
 
-type PreviewScreenMode = "home" | "homeFrame" | "boot" | "status";
+type PreviewScreenMode = "home" | "homeFrame" | "boot" | "status" | "menu";
 type DisplayTextStyle = "Small" | "Primary";
+type RadialMenuItem = "cancel" | "info" | "previousPet" | "nextPet";
 
 interface HomeScreenModel {
   primaryText: string;
@@ -47,6 +48,13 @@ interface StatusScreenModel {
   imuAccelZ: number;
   imuRollDeg: number;
   imuPitchDeg: number;
+}
+
+interface RadialMenuModel {
+  selectedItem: RadialMenuItem;
+  cursorX: number;
+  cursorY: number;
+  imuReady: boolean;
 }
 
 interface GfxGlyph {
@@ -103,7 +111,7 @@ const kPetAreaY = 61;
 const kPetAreaSize = 118;
 const kDefaultCubeScale = 32.0;
 
-const modes = ["home", "homeFrame", "boot", "status"] as const;
+const modes = ["home", "homeFrame", "boot", "status", "menu"] as const;
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = normalize(join(scriptDir, "..", "..", ".."));
 const fontHeaderPath = join(repoRoot, "include", "assets", "fonts", "magicalmond_ogyg820pt7b.h");
@@ -164,6 +172,17 @@ class FirmwareScreenPreview {
 
     if (this.mode === "status") {
       this.renderStatus(toStatusScreenModel(snapshot));
+      return;
+    }
+
+    if (this.mode === "menu") {
+      this.renderHome(toHomeScreenModel(snapshot));
+      this.renderRadialMenu({
+        selectedItem: "info",
+        cursorX: 32,
+        cursorY: -32,
+        imuReady: true
+      });
       return;
     }
 
@@ -238,6 +257,11 @@ class FirmwareScreenPreview {
     this.display.drawTextCentered(localBatteryText, 184, "Small", batteryColor(model.localBatteryPercent));
     this.display.drawTextCentered(peerBatteryText, 199, "Small", batteryColor(model.peerBatteryPercent));
     this.drawStatusPill(78, 211, model.backendConnected ? "backend ok" : "backend off", stateColor(model.backendConnected));
+  }
+
+  private renderRadialMenu(model: RadialMenuModel) {
+    this.drawRadialFrame(model.selectedItem, false, 0);
+    this.drawRadialCursor(model.cursorX, model.cursorY, model.imuReady ? kWhite : kAmber);
   }
 
   private drawTopStatus(model: HomeScreenModel) {
@@ -326,6 +350,44 @@ class FirmwareScreenPreview {
     this.display.drawRoundRect(x, y, 84, 23, 10, kLine);
     this.display.fillCircle(x + 12, y + 11, 3, color);
     this.display.drawText(text, x + 22, y + 15, "Small", kWhite);
+  }
+
+  private drawRadialFrame(selectedItem: RadialMenuItem, calibrationMode: boolean, completedCount: number) {
+    this.display.fillRect(70, 207, 100, 18, kBlack);
+    this.drawRadialSector(270, kBlack);
+    this.drawRadialSector(90, kBlack);
+    this.drawRadialSector(180, kBlack);
+    this.drawRadialSector(0, kBlack);
+    this.drawRadialSector(270, radialItemColor("cancel", selectedItem === "cancel"));
+    this.drawRadialSector(90, radialItemColor("info", selectedItem === "info"));
+    this.drawRadialSector(180, radialItemColor("previousPet", selectedItem === "previousPet"));
+    this.drawRadialSector(0, radialItemColor("nextPet", selectedItem === "nextPet"));
+
+    const label = calibrationMode ? `${completedCount}/4` : radialItemLabel(selectedItem);
+    this.display.drawTextCentered(label, 218, "Small", kMuted);
+  }
+
+  private drawRadialSector(centerDeg: number, color: number) {
+    const startDeg = centerDeg - 39;
+    const endDeg = centerDeg + 39;
+    for (let deg = startDeg; deg < endDeg; deg += 2) {
+      const radians = deg * DEG_TO_RAD;
+      const nextRadians = (deg + 2) * DEG_TO_RAD;
+      for (let radius = 104; radius <= 114; radius += 2) {
+        const x1 = kScreenCenter + Math.round(Math.cos(radians) * radius);
+        const y1 = kScreenCenter - Math.round(Math.sin(radians) * radius);
+        const x2 = kScreenCenter + Math.round(Math.cos(nextRadians) * radius);
+        const y2 = kScreenCenter - Math.round(Math.sin(nextRadians) * radius);
+        this.display.drawLine(x1, y1, x2, y2, color);
+      }
+    }
+  }
+
+  private drawRadialCursor(cursorX: number, cursorY: number, color: number) {
+    const x = kScreenCenter + Math.round(cursorX);
+    const y = kScreenCenter + Math.round(cursorY);
+    this.display.fillCircle(x, y, 4, color);
+    this.display.drawCircle(x, y, 7, color);
   }
 }
 
@@ -944,6 +1006,45 @@ function stateColor(active: boolean) {
   return active ? kGreen : kMuted;
 }
 
+function radialItemLabel(item: RadialMenuItem) {
+  if (item === "info") {
+    return "info";
+  }
+  if (item === "previousPet") {
+    return "prev pet";
+  }
+  if (item === "nextPet") {
+    return "next pet";
+  }
+  return "cancel";
+}
+
+function radialItemColor(item: RadialMenuItem, selected: boolean) {
+  if (!selected) {
+    if (item === "info") {
+      return 0x18c7;
+    }
+    if (item === "previousPet") {
+      return 0x120d;
+    }
+    if (item === "nextPet") {
+      return 0x1b46;
+    }
+    return 0x28e3;
+  }
+
+  if (item === "info") {
+    return kBlue;
+  }
+  if (item === "previousPet") {
+    return 0x6d7f;
+  }
+  if (item === "nextPet") {
+    return kGreen;
+  }
+  return kAmber;
+}
+
 function scaleColor(color: number, amount: number) {
   const r = (((color >> 11) & 0x1f) * amount) / 255;
   const g = (((color >> 5) & 0x3f) * amount) / 255;
@@ -995,7 +1096,7 @@ function printHelp() {
   console.log(`Usage: bun run preview:png -- [options]
 
 Options:
-  -m, --mode <mode>       all, home, homeFrame, boot, or status
+  -m, --mode <mode>       all, home, homeFrame, boot, status, or menu
   -o, --out <path>        output PNG path; with --mode all this is treated as an output directory
       --snapshot <path>   optional AppSnapshot JSON file
   -h, --help              show this help
