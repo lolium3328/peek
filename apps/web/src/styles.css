@@ -445,12 +445,15 @@ dd {
   text-decoration: none;
 }
 
-.asset-workspace,
 .firmware-preview-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
   gap: 16px;
   align-items: start;
+}
+
+.asset-section {
+  margin-top: 16px;
 }
 
 .asset-uploader {
@@ -595,7 +598,6 @@ dd {
     display: grid;
   }
 
-  .asset-workspace,
   .firmware-preview-workspace {
     grid-template-columns: 1fr;
   }

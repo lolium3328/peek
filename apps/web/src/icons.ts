@@ -1,5 +1,6 @@
 import {
   Activity,
+  ArrowLeft,
   Battery,
   Check,
   Clock3,
@@ -31,6 +32,7 @@ import {
 
 const lucideIcons = {
   Activity,
+  ArrowLeft,
   Battery,
   Check,
   Clock3,

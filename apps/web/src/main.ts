@@ -96,6 +96,10 @@ function bindForm() {
     void sendCommand({ kind: "config.apply", at: Date.now() });
   });
 
+  byId<HTMLButtonElement>("dev-preview").addEventListener("click", () => {
+    setMode("preview");
+  });
+
   syncRangeLabels();
 }
 
@@ -118,6 +122,9 @@ function bindFirmwarePreview() {
       }
     });
   }
+  byId<HTMLButtonElement>("preview-back").addEventListener("click", () => {
+    setMode("manage");
+  });
   firmwarePreview.setMode(firmwarePreviewMode);
 }
 
@@ -568,9 +575,7 @@ function shell() {
       </header>
 
       <nav class="mode-tabs" aria-label="管理模式">
-        <button class="mode-tab is-active" type="button" data-mode="config">${icon("settings")}<span>配置</span></button>
-        <button class="mode-tab" type="button" data-mode="preview">${icon("monitor")}<span>Preview</span></button>
-        <button class="mode-tab" type="button" data-mode="assets">${icon("image")}<span>动画</span></button>
+        <button class="mode-tab is-active" type="button" data-mode="manage">${icon("settings")}<span>管理</span></button>
       </nav>
 
       <section class="status-strip" aria-label="设备状态">
@@ -597,7 +602,7 @@ function shell() {
         </article>
       </section>
 
-      <section data-view="config">
+      <section data-view="manage">
         <div class="workspace">
           <form class="config-panel" id="config-form">
             <section class="panel-section">
@@ -756,6 +761,9 @@ function shell() {
                 <button class="secondary-button" id="apply-config" type="button">
                   ${icon("check")}<span>应用</span>
                 </button>
+                <button class="secondary-button" id="dev-preview" type="button">
+                  ${icon("monitor")}<span>预览</span>
+                </button>
               </div>
             </section>
 
@@ -767,47 +775,9 @@ function shell() {
             </section>
           </aside>
         </div>
-      </section>
 
-      <section data-view="preview" hidden>
-        <div class="firmware-preview-workspace">
-          <section class="panel-section firmware-preview-panel">
-            <div class="section-heading">
-              <h2>${icon("monitor")} Firmware Canvas Preview</h2>
-              <span id="firmware-preview-state">renderHome</span>
-            </div>
-            <div class="firmware-preview-stage">
-              <canvas
-                class="firmware-preview-canvas"
-                id="firmware-preview-canvas"
-                width="240"
-                height="240"
-                aria-label="Firmware screen preview"
-              ></canvas>
-            </div>
-            <div class="preview-toolbar">
-              <button class="secondary-button is-active" type="button" data-preview-screen="home">${icon("home")}<span>Home</span></button>
-              <button class="secondary-button" type="button" data-preview-screen="homeFrame">${icon("scan-line")}<span>Frame</span></button>
-              <button class="secondary-button" type="button" data-preview-screen="boot">${icon("power")}<span>Boot</span></button>
-              <button class="secondary-button" type="button" data-preview-screen="status">${icon("cpu")}<span>Status</span></button>
-            </div>
-          </section>
-
-          <section class="panel-section">
-            <div class="section-heading">
-              <h2>${icon("list-checks")} Mirror Source</h2>
-            </div>
-            <div class="preview-notes">
-              <p>Read-only development preview. It mirrors <code>DisplayDriver.cpp</code>, <code>ScreenRenderer.cpp</code>, <code>glcdfont.h</code>, and <code>magicalmond_ogyg820pt7b.h</code>.</p>
-              <p>Canvas coordinates stay at the hardware 240x240 pixel grid. CSS only scales the rendered bitmap.</p>
-            </div>
-          </section>
-        </div>
-      </section>
-
-      <section data-view="assets" hidden>
-        <div class="asset-workspace">
-          <form class="panel-section asset-uploader" id="asset-form">
+        <section class="panel-section asset-section">
+          <form class="asset-uploader" id="asset-form">
             <div class="section-heading">
               <h2>${icon("upload")} 动画文件</h2>
               <span id="asset-state">就绪</span>
@@ -842,8 +812,47 @@ function shell() {
             </div>
             <div class="asset-list" id="asset-list"></div>
           </section>
+        </section>
+      </section>
+
+      <section data-view="preview" hidden>
+        <div class="firmware-preview-workspace">
+          <section class="panel-section firmware-preview-panel">
+            <div class="section-heading">
+              <h2>${icon("monitor")} Firmware Canvas Preview</h2>
+              <span id="firmware-preview-state">renderHome</span>
+            </div>
+            <div class="firmware-preview-stage">
+              <canvas
+                class="firmware-preview-canvas"
+                id="firmware-preview-canvas"
+                width="240"
+                height="240"
+                aria-label="Firmware screen preview"
+              ></canvas>
+            </div>
+            <div class="preview-toolbar">
+              <button class="secondary-button" type="button" id="preview-back">${icon("arrow-left")}<span>管理</span></button>
+              <button class="secondary-button is-active" type="button" data-preview-screen="home">${icon("home")}<span>Home</span></button>
+              <button class="secondary-button" type="button" data-preview-screen="homeFrame">${icon("scan-line")}<span>Frame</span></button>
+              <button class="secondary-button" type="button" data-preview-screen="boot">${icon("power")}<span>Boot</span></button>
+              <button class="secondary-button" type="button" data-preview-screen="status">${icon("cpu")}<span>Status</span></button>
+            </div>
+          </section>
+
+          <section class="panel-section">
+            <div class="section-heading">
+              <h2>${icon("list-checks")} Mirror Source</h2>
+            </div>
+            <div class="preview-notes">
+              <p>Read-only development preview. It mirrors <code>DisplayDriver.cpp</code>, <code>ScreenRenderer.cpp</code>, <code>glcdfont.h</code>, and <code>magicalmond_ogyg820pt7b.h</code>.</p>
+              <p>Canvas coordinates stay at the hardware 240x240 pixel grid. CSS only scales the rendered bitmap.</p>
+            </div>
+          </section>
         </div>
       </section>
+
+
 
     </main>
   `;
