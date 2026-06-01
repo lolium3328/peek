@@ -23,6 +23,7 @@ constexpr int16_t kPetAreaSize = 118;
 constexpr float kDefaultCubeScale = 32.0f;
 constexpr uint8_t kPkaHeaderSize = 12;
 constexpr uint8_t kPkaFrameEntrySize = 10;
+uint16_t petBuffer[kPetAreaSize * kPetAreaSize];
 
 struct CubePoint {
   int16_t x = 0;
@@ -95,17 +96,20 @@ void ScreenRenderer::renderHome(const HomeScreenModel &model) {
 }
 
 void ScreenRenderer::renderHomeFrame(const HomeScreenModel &model) {
-  clearPetArea();
-
-  if (model.poseAlert) {
-    display_.drawCircle(kScreenCenter, kScreenCenter, 72, kAmber);
+  if (model.petAnimationVisible) {
+    clearPetArea();
+    if (drawPetAnimation(model)) {
+      return;
+    }
   }
 
-  if (model.petAnimationVisible && drawPetAnimation(model)) {
-    // Drawn from cached asset package.
-  } else if (model.cubeVisible) {
-    drawPetCube(model);
+  if (model.cubeVisible) {
+    drawPetCubeBuffered(model);
   } else {
+    clearPetArea();
+    if (model.poseAlert) {
+      display_.drawCircle(kScreenCenter, kScreenCenter, 72, kAmber);
+    }
     display_.drawTextCentered(model.primaryText, 122, DisplayTextStyle::Primary, kWhite);
   }
 }
@@ -207,6 +211,108 @@ void ScreenRenderer::drawPetCube(const HomeScreenModel &model) {
     const CubePoint &b = points[edges[index][1]];
     const uint16_t color = (a.z + b.z) > 0.0f ? kGreen : kMuted;
     display_.drawLine(a.x, a.y, b.x, b.y, color);
+  }
+}
+
+void ScreenRenderer::drawPetCubeBuffered(const HomeScreenModel &model) {
+  static constexpr int8_t vertices[8][3] = {
+      {-1, -1, -1},
+      {1, -1, -1},
+      {1, 1, -1},
+      {-1, 1, -1},
+      {-1, -1, 1},
+      {1, -1, 1},
+      {1, 1, 1},
+      {-1, 1, 1},
+  };
+  static constexpr uint8_t edges[12][2] = {
+      {0, 1}, {1, 2}, {2, 3}, {3, 0},
+      {4, 5}, {5, 6}, {6, 7}, {7, 4},
+      {0, 4}, {1, 5}, {2, 6}, {3, 7},
+  };
+
+  clearPetBuffer(kBlack);
+
+  const float roll = model.cubeRollDeg * DEG_TO_RAD;
+  const float pitch = model.cubePitchDeg * DEG_TO_RAD;
+  const float yaw = model.cubeYawDeg * DEG_TO_RAD;
+  const float sr = sinf(roll);
+  const float cr = cosf(roll);
+  const float sp = sinf(pitch);
+  const float cp = cosf(pitch);
+  const float sy = sinf(yaw);
+  const float cy = cosf(yaw);
+  const float scale = model.cubeScale > 0.0f ? model.cubeScale : kDefaultCubeScale;
+  const int16_t centerX = kScreenCenter + static_cast<int16_t>(roundf(model.cubeOffsetX));
+  const int16_t centerY = kCubeCenterY + static_cast<int16_t>(roundf(model.cubeOffsetY));
+
+  CubePoint points[8];
+  for (uint8_t index = 0; index < 8; ++index) {
+    const float x = static_cast<float>(vertices[index][0]);
+    const float y = static_cast<float>(vertices[index][1]);
+    const float z = static_cast<float>(vertices[index][2]);
+
+    const float yRoll = y * cr - z * sr;
+    const float zRoll = y * sr + z * cr;
+    const float xPitch = x * cp + zRoll * sp;
+    const float zPitch = -x * sp + zRoll * cp;
+    const float xYaw = xPitch * cy - yRoll * sy;
+    const float yYaw = xPitch * sy + yRoll * cy;
+
+    points[index].x = centerX + static_cast<int16_t>(roundf(xYaw * scale)) - kPetAreaX;
+    points[index].y = centerY + static_cast<int16_t>(roundf(yYaw * scale)) - kPetAreaY;
+    points[index].z = zPitch;
+  }
+
+  for (uint8_t index = 0; index < 12; ++index) {
+    const CubePoint &a = points[edges[index][0]];
+    const CubePoint &b = points[edges[index][1]];
+    const uint16_t color = (a.z + b.z) > 0.0f ? kGreen : kMuted;
+    drawPetBufferLine(a.x, a.y, b.x, b.y, color);
+  }
+
+  display_.drawRgb565Bitmap(kPetAreaX, kPetAreaY, petBuffer, kPetAreaSize, kPetAreaSize);
+}
+
+void ScreenRenderer::clearPetBuffer(uint16_t color) {
+  for (uint16_t index = 0; index < kPetAreaSize * kPetAreaSize; ++index) {
+    petBuffer[index] = color;
+  }
+}
+
+void ScreenRenderer::putPetPixel(int16_t x, int16_t y, uint16_t color) {
+  if (x < 0 || y < 0 || x >= kPetAreaSize || y >= kPetAreaSize) {
+    return;
+  }
+  petBuffer[static_cast<uint16_t>(y) * kPetAreaSize + static_cast<uint16_t>(x)] = color;
+}
+
+void ScreenRenderer::drawPetBufferLine(
+    int16_t x0,
+    int16_t y0,
+    int16_t x1,
+    int16_t y1,
+    uint16_t color) {
+  const int16_t dx = abs(x1 - x0);
+  const int16_t sx = x0 < x1 ? 1 : -1;
+  const int16_t dy = -abs(y1 - y0);
+  const int16_t sy = y0 < y1 ? 1 : -1;
+  int16_t error = dx + dy;
+
+  while (true) {
+    putPetPixel(x0, y0, color);
+    if (x0 == x1 && y0 == y1) {
+      break;
+    }
+    const int16_t error2 = error * 2;
+    if (error2 >= dy) {
+      error += dy;
+      x0 += sx;
+    }
+    if (error2 <= dx) {
+      error += dx;
+      y0 += sy;
+    }
   }
 }
 
