@@ -4,6 +4,7 @@
 #include <LittleFS.h>
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
 namespace {
 constexpr uint16_t kBlack = 0x0000;
@@ -85,6 +86,7 @@ uint16_t batteryColor(uint8_t percent) {
 ScreenRenderer::ScreenRenderer(DisplayDriver &display) : display_(display) {}
 
 void ScreenRenderer::renderBoot(const BootScreenModel &model) {
+  resetHomeCache();
   display_.clear(kBlack);
   display_.drawCircle(kScreenCenter, kScreenCenter, 110, kLine);
   display_.drawTextCentered(model.title, 105, DisplayTextStyle::Primary, kWhite);
@@ -92,47 +94,25 @@ void ScreenRenderer::renderBoot(const BootScreenModel &model) {
 }
 
 void ScreenRenderer::renderHome(const HomeScreenModel &model) {
+  resetHomeCache();
   display_.clear(kBlack);
-  display_.drawBatteryBars(model.localBatteryPercent, model.peerBatteryPercent);
-  display_.drawCircle(kScreenCenter, kScreenCenter, 88, kLine);
-  display_.drawCircle(kScreenCenter, kScreenCenter, 89, 0x0841);
-  drawTopStatus(model);
-
-  if (model.poseAlert) {
-    display_.drawCircle(kScreenCenter, kScreenCenter, 72, kAmber);
-  }
-
-  if (model.petAnimationVisible && drawPetAnimation(model)) {
-    // Drawn from cached asset package.
-  } else if (model.cubeVisible) {
-    drawPetCube(model);
-  } else {
-    display_.drawTextCentered(model.primaryText, 122, DisplayTextStyle::Primary, kWhite);
-  }
-  drawBottomHint(model.hintText);
+  drawHomeChrome(model);
+  renderHomeContent(model, true);
 }
 
 void ScreenRenderer::renderHomeFrame(const HomeScreenModel &model) {
-  if (model.petAnimationVisible) {
-    if (drawPetAnimation(model)) {
-      return;
-    }
-    clearPetArea();  // 动画失败，清空区域给后续路径
+  if (!homeChromeDrawn_) {
+    renderHome(model);
+    return;
   }
-  pet2WasActive = false;  // pet2 本帧未活跃，下一帧若恢复需全量刷新
-
-  if (model.cubeVisible) {
-    drawPetCubeBuffered(model);
-  } else {
-    clearPetArea();
-    if (model.poseAlert) {
-      display_.drawCircle(kScreenCenter, kScreenCenter, 72, kAmber);
-    }
-    display_.drawTextCentered(model.primaryText, 122, DisplayTextStyle::Primary, kWhite);
+  if (updateHomeChrome(model)) {
+    return;
   }
+  renderHomeContent(model, false);
 }
 
 void ScreenRenderer::renderStatus(const StatusScreenModel &model) {
+  resetHomeCache();
   char buttonText[20];
   char rssiText[20];
   char imuText[20];
@@ -164,6 +144,155 @@ void ScreenRenderer::renderStatus(const StatusScreenModel &model) {
   display_.drawTextCentered(localBatteryText, 184, DisplayTextStyle::Small, batteryColor(model.localBatteryPercent));
   display_.drawTextCentered(peerBatteryText, 199, DisplayTextStyle::Small, batteryColor(model.peerBatteryPercent));
   drawStatusPill(78, 211, model.backendConnected ? "backend ok" : "backend off", stateColor(model.backendConnected));
+}
+
+void ScreenRenderer::resetHomeCache() {
+  homeChromeDrawn_ = false;
+  lastHomeContentKind_ = HomeContentKind::None;
+  lastLocalBatteryPercent_ = 0;
+  lastPeerBatteryPercent_ = 0;
+  lastWifiConnected_ = false;
+  lastBackendConnected_ = false;
+  lastPoseAlert_ = false;
+  lastPrimaryText_[0] = '\0';
+  lastHintText_[0] = '\0';
+  lastLocalWeather_[0] = '\0';
+  lastPeerWeather_[0] = '\0';
+  lastLocalLabel_[0] = '\0';
+  lastPeerLabel_[0] = '\0';
+  lastAnimationPath_[0] = '\0';
+  pet2WasActive = false;
+}
+
+void ScreenRenderer::drawHomeChrome(const HomeScreenModel &model) {
+  display_.drawBatteryBars(model.localBatteryPercent, model.peerBatteryPercent);
+  display_.drawCircle(kScreenCenter, kScreenCenter, 88, kLine);
+  display_.drawCircle(kScreenCenter, kScreenCenter, 89, 0x0841);
+  drawTopStatus(model);
+  if (model.poseAlert) {
+    display_.drawCircle(kScreenCenter, kScreenCenter, 72, kAmber);
+  }
+  drawBottomHint(model.hintText);
+
+  lastLocalBatteryPercent_ = model.localBatteryPercent;
+  lastPeerBatteryPercent_ = model.peerBatteryPercent;
+  lastWifiConnected_ = model.wifiConnected;
+  lastBackendConnected_ = model.backendConnected;
+  lastPoseAlert_ = model.poseAlert;
+  copyText(lastHintText_, sizeof(lastHintText_), model.hintText);
+  copyText(lastLocalWeather_, sizeof(lastLocalWeather_), model.localWeather);
+  copyText(lastPeerWeather_, sizeof(lastPeerWeather_), model.peerWeather);
+  copyText(lastLocalLabel_, sizeof(lastLocalLabel_), model.localLabel);
+  copyText(lastPeerLabel_, sizeof(lastPeerLabel_), model.peerLabel);
+  homeChromeDrawn_ = true;
+}
+
+bool ScreenRenderer::updateHomeChrome(const HomeScreenModel &model) {
+  if (model.poseAlert != lastPoseAlert_) {
+    renderHome(model);
+    return true;
+  }
+
+  if (model.localBatteryPercent != lastLocalBatteryPercent_
+      || model.peerBatteryPercent != lastPeerBatteryPercent_) {
+    display_.drawBatteryBars(model.localBatteryPercent, model.peerBatteryPercent);
+    lastLocalBatteryPercent_ = model.localBatteryPercent;
+    lastPeerBatteryPercent_ = model.peerBatteryPercent;
+  }
+
+  if (textChanged(lastLocalWeather_, model.localWeather)
+      || textChanged(lastPeerWeather_, model.peerWeather)
+      || textChanged(lastLocalLabel_, model.localLabel)
+      || textChanged(lastPeerLabel_, model.peerLabel)) {
+    drawTopStatus(model);
+    copyText(lastLocalWeather_, sizeof(lastLocalWeather_), model.localWeather);
+    copyText(lastPeerWeather_, sizeof(lastPeerWeather_), model.peerWeather);
+    copyText(lastLocalLabel_, sizeof(lastLocalLabel_), model.localLabel);
+    copyText(lastPeerLabel_, sizeof(lastPeerLabel_), model.peerLabel);
+  } else if (model.wifiConnected != lastWifiConnected_
+             || model.backendConnected != lastBackendConnected_) {
+    drawConnectionDots(model.wifiConnected, model.backendConnected);
+  }
+
+  if (model.wifiConnected != lastWifiConnected_) {
+    lastWifiConnected_ = model.wifiConnected;
+  }
+  if (model.backendConnected != lastBackendConnected_) {
+    lastBackendConnected_ = model.backendConnected;
+  }
+
+  if (textChanged(lastHintText_, model.hintText)) {
+    drawBottomHint(model.hintText);
+    copyText(lastHintText_, sizeof(lastHintText_), model.hintText);
+  }
+
+  return false;
+}
+
+void ScreenRenderer::renderHomeContent(const HomeScreenModel &model, bool force) {
+  HomeContentKind kind = homeContentKind(model);
+  if (kind == HomeContentKind::Animation && !model.petAnimationPath) {
+    kind = HomeContentKind::Text;
+  }
+
+  const bool animationChanged =
+      kind == HomeContentKind::Animation && textChanged(lastAnimationPath_, model.petAnimationPath);
+
+  if (kind != lastHomeContentKind_ || animationChanged) {
+    clearPetArea();
+    pet2WasActive = false;
+  }
+
+  if (kind == HomeContentKind::Animation) {
+    if (drawPetAnimation(model)) {
+      copyText(lastPrimaryText_, sizeof(lastPrimaryText_), model.primaryText);
+      copyText(lastAnimationPath_, sizeof(lastAnimationPath_), model.petAnimationPath);
+      lastHomeContentKind_ = HomeContentKind::Animation;
+      return;
+    }
+    kind = model.cubeVisible ? HomeContentKind::Cube : HomeContentKind::Text;
+    clearPetArea();
+    pet2WasActive = false;
+  }
+
+  if (kind == HomeContentKind::Cube) {
+    pet2WasActive = false;
+    drawPetCubeBuffered(model);
+  } else {
+    pet2WasActive = false;
+    if (force || kind != lastHomeContentKind_ || textChanged(lastPrimaryText_, model.primaryText)) {
+      clearPetArea();
+      display_.drawTextCentered(model.primaryText, 122, DisplayTextStyle::Primary, kWhite);
+    }
+  }
+
+  copyText(lastPrimaryText_, sizeof(lastPrimaryText_), model.primaryText);
+  lastAnimationPath_[0] = '\0';
+  lastHomeContentKind_ = kind;
+}
+
+ScreenRenderer::HomeContentKind ScreenRenderer::homeContentKind(const HomeScreenModel &model) const {
+  if (model.petAnimationVisible) {
+    return HomeContentKind::Animation;
+  }
+  if (model.cubeVisible) {
+    return HomeContentKind::Cube;
+  }
+  return HomeContentKind::Text;
+}
+
+bool ScreenRenderer::textChanged(const char *cached, const char *current) const {
+  const char *safeCurrent = current ? current : "";
+  return strcmp(cached, safeCurrent) != 0;
+}
+
+void ScreenRenderer::copyText(char *target, uint8_t targetSize, const char *source) {
+  if (targetSize == 0) {
+    return;
+  }
+  const char *safeSource = source ? source : "";
+  strncpy(target, safeSource, targetSize - 1);
+  target[targetSize - 1] = '\0';
 }
 
 void ScreenRenderer::drawTopStatus(const HomeScreenModel &model) {

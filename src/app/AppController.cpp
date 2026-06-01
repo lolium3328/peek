@@ -237,7 +237,7 @@ void AppController::resetPet() {
 void AppController::renderHomeText(const char *hintText) {
   HomeScreenModel model;
   fillHomeModel(model, hintText);
-  screen_.renderHome(model);
+  screen_.renderHomeFrame(model);
   lastHomeRenderMs_ = millis();
 }
 

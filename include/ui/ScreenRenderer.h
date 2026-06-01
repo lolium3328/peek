@@ -13,6 +13,20 @@ public:
   void renderStatus(const StatusScreenModel &model);
 
 private:
+  enum class HomeContentKind {
+    None,
+    Cube,
+    Animation,
+    Text,
+  };
+
+  void resetHomeCache();
+  void drawHomeChrome(const HomeScreenModel &model);
+  bool updateHomeChrome(const HomeScreenModel &model);
+  void renderHomeContent(const HomeScreenModel &model, bool force);
+  HomeContentKind homeContentKind(const HomeScreenModel &model) const;
+  bool textChanged(const char *cached, const char *current) const;
+  void copyText(char *target, uint8_t targetSize, const char *source);
   void drawTopStatus(const HomeScreenModel &model);
   void clearPetArea();
   void drawPetCube(const HomeScreenModel &model);
@@ -28,4 +42,18 @@ private:
   void drawTinyBattery(int16_t x, int16_t y, uint8_t percent, uint16_t color);
 
   DisplayDriver &display_;
+  bool homeChromeDrawn_ = false;
+  HomeContentKind lastHomeContentKind_ = HomeContentKind::None;
+  uint8_t lastLocalBatteryPercent_ = 0;
+  uint8_t lastPeerBatteryPercent_ = 0;
+  bool lastWifiConnected_ = false;
+  bool lastBackendConnected_ = false;
+  bool lastPoseAlert_ = false;
+  char lastPrimaryText_[32] = "";
+  char lastHintText_[40] = "";
+  char lastLocalWeather_[16] = "";
+  char lastPeerWeather_[16] = "";
+  char lastLocalLabel_[8] = "";
+  char lastPeerLabel_[8] = "";
+  char lastAnimationPath_[80] = "";
 };
