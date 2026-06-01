@@ -25,6 +25,23 @@ constexpr uint8_t kPkaHeaderSize = 12;
 constexpr uint8_t kPkaFrameEntrySize = 10;
 uint16_t petBuffer[kPetAreaSize * kPetAreaSize];
 
+// 双缓存：pet2 动画专用，帧间只推脏矩形
+uint16_t* pet2BufA = nullptr;
+uint16_t* pet2BufB = nullptr;
+uint16_t pet2BufWidth = 0;
+uint16_t pet2BufHeight = 0;
+bool pet2BufToggle = false;  // false=用A渲染, true=用B渲染
+bool pet2WasActive = false;  // 上一帧 pet2 是否活跃，用于检测模式切换
+
+void releasePet2Buffers() {
+  delete[] pet2BufA;
+  delete[] pet2BufB;
+  pet2BufA = nullptr;
+  pet2BufB = nullptr;
+  pet2BufWidth = 0;
+  pet2BufHeight = 0;
+}
+
 struct CubePoint {
   int16_t x = 0;
   int16_t y = 0;
@@ -97,11 +114,12 @@ void ScreenRenderer::renderHome(const HomeScreenModel &model) {
 
 void ScreenRenderer::renderHomeFrame(const HomeScreenModel &model) {
   if (model.petAnimationVisible) {
-    clearPetArea();
     if (drawPetAnimation(model)) {
       return;
     }
+    clearPetArea();  // 动画失败，清空区域给后续路径
   }
+  pet2WasActive = false;  // pet2 本帧未活跃，下一帧若恢复需全量刷新
 
   if (model.cubeVisible) {
     drawPetCubeBuffered(model);
@@ -374,31 +392,99 @@ bool ScreenRenderer::drawPetAnimation(const HomeScreenModel &model) {
 
   const int16_t originX = kScreenCenter - static_cast<int16_t>(width) / 2;
   const int16_t originY = kCubeCenterY - static_cast<int16_t>(height) / 2;
-  uint16_t row[kPetAreaSize];
-  uint16_t rowX = 0;
-  uint16_t rowY = 0;
+
+  // 动画尺寸变化时重新分配双缓存
+  const bool sizeChanged = (width != pet2BufWidth || height != pet2BufHeight);
+  if (sizeChanged) {
+    releasePet2Buffers();
+    const uint32_t bufSize = static_cast<uint32_t>(width) * height;
+    pet2BufA = new uint16_t[bufSize];
+    pet2BufB = new uint16_t[bufSize];
+    pet2BufWidth = width;
+    pet2BufHeight = height;
+    if (!pet2BufA || !pet2BufB) {
+      releasePet2Buffers();
+      file.close();
+      return false;
+    }
+  }
+
+  // 选择目标缓存（交替写入）
+  uint16_t* const curBuf = pet2BufToggle ? pet2BufB : pet2BufA;
+  // 首帧条件：尺寸变化 / 上一帧 pet2 未活跃（从 cube/text 切换过来）
+  const bool forceFull = sizeChanged || !pet2WasActive;
+
+  // RLE 解码到目标缓存（线性写入，无需逐行推屏）
   uint32_t remainingPixels = static_cast<uint32_t>(width) * height;
-  uint32_t bytesRead = 0;
+  uint32_t remainingBytes = frameLength;
   file.seek(frameOffset);
 
-  while (remainingPixels > 0 && bytesRead + 4 <= frameLength) {
-    uint16_t runLength = readU16(file);
+  while (remainingPixels > 0 && remainingBytes >= 4) {
+    const uint16_t runLength = readU16(file);
     const uint16_t color = readU16(file);
-    bytesRead += 4;
-    while (runLength > 0 && remainingPixels > 0) {
-      row[rowX++] = color;
-      runLength -= 1;
-      remainingPixels -= 1;
-      if (rowX == width) {
-        display_.drawRgb565Bitmap(originX, originY + rowY, row, width, 1);
-        rowX = 0;
-        rowY += 1;
-      }
+    remainingBytes -= 4;
+    uint16_t run = runLength;
+    while (run > 0 && remainingPixels > 0) {
+      curBuf[static_cast<uint32_t>(width) * height - remainingPixels] = color;
+      --run;
+      --remainingPixels;
     }
   }
 
   file.close();
-  return remainingPixels == 0;
+
+  if (remainingPixels != 0) {
+    return false;  // 不完整帧，不推屏
+  }
+
+  // 推送策略：首帧全量，后续帧只推脏矩形
+  const uint16_t* const prevBuf = pet2BufToggle ? pet2BufA : pet2BufB;
+
+  if (forceFull) {
+    display_.drawRgb565Bitmap(originX, originY, curBuf, width, height);
+  } else {
+    // 计算脏矩形（当前帧与上一帧之间的差异包围盒）
+    int16_t dL = static_cast<int16_t>(width);
+    int16_t dR = -1;
+    int16_t dT = static_cast<int16_t>(height);
+    int16_t dB = -1;
+    const uint32_t total = static_cast<uint32_t>(width) * height;
+    for (uint32_t i = 0; i < total; ++i) {
+      if (curBuf[i] != prevBuf[i]) {
+        const int16_t x = static_cast<int16_t>(i % width);
+        const int16_t y = static_cast<int16_t>(i / width);
+        if (x < dL) dL = x;
+        if (x > dR) dR = x;
+        if (y < dT) dT = y;
+        if (y > dB) dB = y;
+      }
+    }
+
+    if (dL <= dR) {
+      const uint16_t dW = static_cast<uint16_t>(dR - dL + 1);
+      const uint16_t dH = static_cast<uint16_t>(dB - dT + 1);
+      const uint32_t dirtyArea = static_cast<uint32_t>(dW) * dH;
+      const uint32_t fullArea = static_cast<uint32_t>(width) * height;
+
+      if (dirtyArea < fullArea / 4) {
+        // 脏区域小：逐行推脏矩形
+        uint16_t row[kPetAreaSize];
+        for (int16_t y = dT; y <= dB; ++y) {
+          memcpy(row, &curBuf[static_cast<uint32_t>(y) * width + dL], dW * sizeof(uint16_t));
+          display_.drawRgb565Bitmap(originX + dL, originY + y, row, dW, 1);
+        }
+      } else {
+        // 脏区域大：全帧一次性推送
+        display_.drawRgb565Bitmap(originX, originY, curBuf, width, height);
+      }
+    }
+    // 无变化时跳过：dL > dR，不推任何像素
+  }
+
+  // 翻转双缓存
+  pet2BufToggle = !pet2BufToggle;
+  pet2WasActive = true;
+  return true;
 }
 
 void ScreenRenderer::drawWeatherChip(int16_t x, const char *label, const char *weather) {
