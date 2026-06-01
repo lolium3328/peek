@@ -203,6 +203,7 @@ void AppController::loop() {
   }
 
   if (mode_ == AppMode::StatusView
+      && !provisioningActive
       && !touch_.isPressed()
       && config_.sleepTimeoutMs > 0
       && now - lastActivityMs_ >= config_.sleepTimeoutMs) {
@@ -222,7 +223,10 @@ void AppController::loop() {
     renderHomeFrame();
   }
 
-  if (!touch_.isPressed() && config_.sleepTimeoutMs > 0 && now - lastActivityMs_ >= config_.sleepTimeoutMs) {
+  if (!provisioningActive
+      && !touch_.isPressed()
+      && config_.sleepTimeoutMs > 0
+      && now - lastActivityMs_ >= config_.sleepTimeoutMs) {
     enterSleep(now);
   }
 }
