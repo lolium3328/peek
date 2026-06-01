@@ -15,8 +15,9 @@ constexpr uint32_t kThrowLogIntervalMs = 200;
 constexpr uint32_t kShortPressSequenceGapMs = 1500;
 constexpr uint8_t kImuLockShortPressCount = 4;
 constexpr float kRadialCursorGain = 3.0f;
-constexpr float kRadialCursorRadius = 94.0f;
-constexpr float kRadialCalibrationMinTurnDeg = 680.0f;
+constexpr float kRadialCursorRadius = 92.0f;
+constexpr float kRadialCalibrationMinTurnDeg = 330.0f;
+constexpr float kRadialYawMix = 0.35f;
 constexpr float kRadialAdjacentMinDeg = 50.0f;
 constexpr float kRadialAdjacentMaxDeg = 130.0f;
 constexpr int32_t kThrowAccelDeltaThreshold = 7200;
@@ -1036,8 +1037,11 @@ bool AppController::radialRawVector(float &rawX, float &rawY) const {
     return false;
   }
 
-  rawX = relativeDegrees(pose.rollDeg, cubeRollZeroDeg_) * kRadialCursorGain;
-  rawY = relativeDegrees(pose.pitchDeg, cubePitchZeroDeg_) * kRadialCursorGain;
+  const float roll = relativeDegrees(pose.rollDeg, cubeRollZeroDeg_);
+  const float pitch = relativeDegrees(pose.pitchDeg, cubePitchZeroDeg_);
+  const float yaw = relativeDegrees(pose.yawDeg, cubeYawZeroDeg_);
+  rawX = (roll + yaw * kRadialYawMix) * kRadialCursorGain;
+  rawY = (pitch - yaw * kRadialYawMix) * kRadialCursorGain;
   if (fabsf(rawX) + fabsf(rawY) < 1.0f) {
     rawY = kRadialCursorRadius;
   }

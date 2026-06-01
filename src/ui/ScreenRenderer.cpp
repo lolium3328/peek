@@ -101,6 +101,10 @@ void ScreenRenderer::renderHome(const HomeScreenModel &model) {
 }
 
 void ScreenRenderer::renderHomeFrame(const HomeScreenModel &model) {
+  if (radialSurfaceKind_ != RadialSurfaceKind::None) {
+    renderHome(model);
+    return;
+  }
   if (!homeChromeDrawn_) {
     renderHome(model);
     return;
@@ -736,7 +740,7 @@ void ScreenRenderer::updateRadialCursor(float cursorX, float cursorY, uint16_t c
   if (radialCursorDrawn_) {
     const int16_t previousX = kScreenCenter + static_cast<int16_t>(roundf(lastRadialCursorX_));
     const int16_t previousY = kScreenCenter + static_cast<int16_t>(roundf(lastRadialCursorY_));
-    display_.fillCircle(previousX, previousY, 8, kBlack);
+    display_.fillCircle(previousX, previousY, 9, kBlack);
   }
 
   drawRadialCursor(cursorX, cursorY, color);
