@@ -31,10 +31,16 @@ bun run start
 The server uses plain HTTP by default. Set `PEEK_HTTPS=1` only when local HTTPS
 is needed.
 
-The Web console includes a read-only `Preview` tab for firmware UI debugging.
-It redraws the current screen with Canvas from the same constants, pixel
-algorithms, and font data used by `DisplayDriver.cpp` and `ScreenRenderer.cpp`.
-It is a development aid only; it does not edit or save device layouts.
+For firmware UI debugging, generate read-only screen PNGs from the CLI:
+
+```bash
+cd apps/web
+bun run preview:png -- --mode all
+```
+
+The generated images use the same constants, pixel algorithms, and font data
+used by `DisplayDriver.cpp` and `ScreenRenderer.cpp`. They are a development
+aid only; they do not edit or save device layouts.
 
 The server is the primary control plane. Browsers talk to the Bun service, and
 the ESP32 talks back to the service from STA mode through `/api/device/sync`.

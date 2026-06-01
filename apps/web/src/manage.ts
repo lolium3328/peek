@@ -73,10 +73,6 @@ function bindForm() {
     void sendCommand({ kind: "config.apply", at: Date.now() });
   });
 
-  byId<HTMLButtonElement>("dev-preview").addEventListener("click", () => {
-    setMode("preview");
-  });
-
   syncRangeLabels();
 }
 

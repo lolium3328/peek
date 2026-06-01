@@ -1,6 +1,5 @@
 import "./styles.css";
 import { icon, refreshIcons } from "./icons";
-import { FirmwareScreenPreview, type PreviewScreenMode } from "./screenPreview";
 import { initManage, setAssetManifest, applyManageSnapshot, renderAssets, type ManageRefs } from "./manage";
 import { type AppSnapshot, type AssetManifest, type ServerMessage } from "./shared";
 import { byId, request, wsUrl, degree, timeLabel, storageLabel, errorMessage } from "./util";
@@ -31,21 +30,16 @@ const refs = {
   pulseMotor: byId<HTMLButtonElement>("pulse-motor"),
   applyConfig: byId<HTMLButtonElement>("apply-config"),
   assetForm: byId<HTMLFormElement>("asset-form"),
-  assetList: byId<HTMLElement>("asset-list"),
-  firmwarePreviewCanvas: byId<HTMLCanvasElement>("firmware-preview-canvas"),
-  firmwarePreviewState: byId<HTMLElement>("firmware-preview-state")
+  assetList: byId<HTMLElement>("asset-list")
 };
 
 let currentSnapshot: AppSnapshot | null = null;
-const firmwarePreview = new FirmwareScreenPreview(refs.firmwarePreviewCanvas);
 let assetManifest: AssetManifest = { version: 1, revision: 0, pet2AssetId: null, assets: [] };
-let firmwarePreviewMode: PreviewScreenMode = "home";
 let socket: WebSocket | null = null;
 let socketRetryTimer: number | undefined;
 
 bindTabs();
 initManage(refs as unknown as ManageRefs, assetManifest, currentSnapshot);
-bindFirmwarePreview();
 void loadSnapshot();
 connectSocket();
 refreshIcons();
@@ -54,22 +48,6 @@ function bindTabs() {
   for (const tab of Array.from(document.querySelectorAll<HTMLButtonElement>(".mode-tab"))) {
     tab.addEventListener("click", () => setMode(tab.dataset.mode ?? "manage"));
   }
-}
-
-function bindFirmwarePreview() {
-  for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>("[data-preview-screen]"))) {
-    button.addEventListener("click", () => {
-      const mode = button.dataset.previewScreen as PreviewScreenMode;
-      firmwarePreviewMode = mode;
-      firmwarePreview.setMode(mode);
-      refs.firmwarePreviewState.textContent = previewModeLabel(mode);
-      for (const item of Array.from(document.querySelectorAll<HTMLButtonElement>("[data-preview-screen]"))) {
-        item.classList.toggle("is-active", item === button);
-      }
-    });
-  }
-  byId<HTMLButtonElement>("preview-back").addEventListener("click", () => setMode("manage"));
-  firmwarePreview.setMode(firmwarePreviewMode);
 }
 
 async function loadSnapshot() {
@@ -120,7 +98,6 @@ function applySnapshot(snapshot: AppSnapshot) {
   applyManageSnapshot(snapshot);
   renderStatus(snapshot);
   renderUrls(snapshot.lanUrls);
-  firmwarePreview.setSnapshot(snapshot);
 }
 
 function renderStatus(snapshot: AppSnapshot) {
@@ -159,13 +136,6 @@ function setMode(mode: string) {
   for (const view of Array.from(document.querySelectorAll<HTMLElement>("[data-view]"))) {
     view.hidden = view.dataset.view !== mode;
   }
-}
-
-function previewModeLabel(mode: PreviewScreenMode) {
-  if (mode === "homeFrame") return "renderHomeFrame";
-  if (mode === "boot") return "renderBoot";
-  if (mode === "status") return "renderStatus";
-  return "renderHome";
 }
 
 function shell() {
@@ -286,7 +256,6 @@ function shell() {
               <div class="command-grid">
                 <button class="secondary-button" id="pulse-motor" type="button">${icon("vibrate")}<span>马达</span></button>
                 <button class="secondary-button" id="apply-config" type="button">${icon("check")}<span>应用</span></button>
-                <button class="secondary-button" id="dev-preview" type="button">${icon("monitor")}<span>预览</span></button>
               </div>
             </section>
             <section class="panel-section">
@@ -312,31 +281,6 @@ function shell() {
             <div class="asset-list" id="asset-list"></div>
           </section>
         </section>
-      </section>
-
-      <section data-view="preview" hidden>
-        <div class="firmware-preview-workspace">
-          <section class="panel-section firmware-preview-panel">
-            <div class="section-heading"><h2>${icon("monitor")} Firmware Canvas Preview</h2><span id="firmware-preview-state">renderHome</span></div>
-            <div class="firmware-preview-stage">
-              <canvas class="firmware-preview-canvas" id="firmware-preview-canvas" width="240" height="240" aria-label="Firmware screen preview"></canvas>
-            </div>
-            <div class="preview-toolbar">
-              <button class="secondary-button" type="button" id="preview-back">${icon("arrow-left")}<span>管理</span></button>
-              <button class="secondary-button is-active" type="button" data-preview-screen="home">${icon("home")}<span>Home</span></button>
-              <button class="secondary-button" type="button" data-preview-screen="homeFrame">${icon("scan-line")}<span>Frame</span></button>
-              <button class="secondary-button" type="button" data-preview-screen="boot">${icon("power")}<span>Boot</span></button>
-              <button class="secondary-button" type="button" data-preview-screen="status">${icon("cpu")}<span>Status</span></button>
-            </div>
-          </section>
-          <section class="panel-section">
-            <div class="section-heading"><h2>${icon("list-checks")} Mirror Source</h2></div>
-            <div class="preview-notes">
-              <p>Read-only development preview. It mirrors <code>DisplayDriver.cpp</code>, <code>ScreenRenderer.cpp</code>, <code>glcdfont.h</code>, and <code>magicalmond_ogyg820pt7b.h</code>.</p>
-              <p>Canvas coordinates stay at the hardware 240x240 pixel grid. CSS only scales the rendered bitmap.</p>
-            </div>
-          </section>
-        </div>
       </section>
     </main>
   `;
