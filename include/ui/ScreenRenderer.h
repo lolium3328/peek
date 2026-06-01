@@ -22,6 +22,12 @@ private:
     Text,
   };
 
+  enum class RadialSurfaceKind {
+    None,
+    Menu,
+    Calibration,
+  };
+
   void resetHomeCache();
   void drawHomeChrome(const HomeScreenModel &model);
   bool updateHomeChrome(const HomeScreenModel &model);
@@ -43,7 +49,10 @@ private:
   void drawStatusPill(int16_t x, int16_t y, const char *text, uint16_t color);
   void drawTinyBattery(int16_t x, int16_t y, uint8_t percent, uint16_t color);
   void drawRadialSector(float centerDeg, uint16_t color);
+  void drawRadialFrame(RadialMenuItem selectedItem, bool calibrationMode, uint8_t completedCount);
   void drawRadialCursor(float cursorX, float cursorY, uint16_t color);
+  void updateRadialCursor(float cursorX, float cursorY, uint16_t color);
+  void resetRadialCache();
   const char *radialItemLabel(RadialMenuItem item) const;
   uint16_t radialItemColor(RadialMenuItem item, bool selected) const;
 
@@ -62,4 +71,10 @@ private:
   char lastLocalLabel_[8] = "";
   char lastPeerLabel_[8] = "";
   char lastAnimationPath_[80] = "";
+  RadialSurfaceKind radialSurfaceKind_ = RadialSurfaceKind::None;
+  RadialMenuItem lastRadialItem_ = RadialMenuItem::Cancel;
+  bool radialCursorDrawn_ = false;
+  float lastRadialCursorX_ = 0.0f;
+  float lastRadialCursorY_ = 0.0f;
+  uint8_t lastRadialCompletedCount_ = 0;
 };
