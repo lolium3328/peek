@@ -135,27 +135,12 @@ void ScreenRenderer::renderStatus(const StatusScreenModel &model) {
 
 void ScreenRenderer::renderRadialMenu(const RadialMenuModel &model) {
   if (radialSurfaceKind_ != RadialSurfaceKind::Menu || model.selectedItem != lastRadialItem_) {
-    drawRadialFrame(model.selectedItem, false, 0);
+    drawRadialFrame(model.selectedItem);
     radialSurfaceKind_ = RadialSurfaceKind::Menu;
     lastRadialItem_ = model.selectedItem;
-    lastRadialCompletedCount_ = 0;
   }
 
   updateRadialCursor(model.cursorX, model.cursorY, model.imuReady ? kWhite : kAmber);
-}
-
-void ScreenRenderer::renderRadialCalibration(const RadialCalibrationModel &model) {
-  if (radialSurfaceKind_ != RadialSurfaceKind::Calibration
-      || model.targetItem != lastRadialItem_
-      || model.completedCount != lastRadialCompletedCount_
-      || model.failed) {
-    drawRadialFrame(model.targetItem, true, model.completedCount);
-    radialSurfaceKind_ = RadialSurfaceKind::Calibration;
-    lastRadialItem_ = model.targetItem;
-    lastRadialCompletedCount_ = model.completedCount;
-  }
-
-  updateRadialCursor(model.cursorX, model.cursorY, model.failed ? kRed : kWhite);
 }
 
 void ScreenRenderer::resetHomeCache() {
@@ -434,25 +419,59 @@ void ScreenRenderer::drawPetCubeBuffered(const HomeScreenModel &model) {
 void ScreenRenderer::renderPetContentThrown(const HomeScreenModel &model) {
   clearPetArea();
 
-  const float radRoll = model.cubeRollDeg * DEG_TO_RAD;
-  const float radPitch = model.cubePitchDeg * DEG_TO_RAD;
-  const float flutterX = sinf(radRoll) * 3.0f;
-  const float flutterY = cosf(radPitch) * 3.0f;
-  const int16_t offsetX = static_cast<int16_t>(roundf(model.cubeOffsetX + flutterX));
-  const int16_t offsetY = static_cast<int16_t>(roundf(model.cubeOffsetY + flutterY));
+  const float roll = model.cubeRollDeg * DEG_TO_RAD;
+  const float pitch = model.cubePitchDeg * DEG_TO_RAD;
+  const float yaw = model.cubeYawDeg * DEG_TO_RAD;
+  const float sr = sinf(roll), cr = cosf(roll);
+  const float sp = sinf(pitch), cp = cosf(pitch);
+  const float sy = sinf(yaw), cy = cosf(yaw);
+  const float cScale = model.cubeScale > 0.0f ? model.cubeScale : kDefaultCubeScale;
+  const int16_t baseX = kScreenCenter + static_cast<int16_t>(roundf(model.cubeOffsetX));
+  const int16_t baseY = kCubeCenterY + static_cast<int16_t>(roundf(model.cubeOffsetY));
+
+  constexpr int8_t face[4][3] = {{-1,-1,1},{1,-1,1},{1,1,1},{-1,1,1}};
+  CubePoint corners[4];
+  for (int i = 0; i < 4; ++i) {
+    float x = static_cast<float>(face[i][0]);
+    float y = static_cast<float>(face[i][1]);
+    float z = static_cast<float>(face[i][2]);
+    float yr = y*cr - z*sr;
+    float zr = y*sr + z*cr;
+    float xp = x*cp + zr*sp;
+    float zp = -x*sp + zr*cp;
+    float xy = xp*cy - yr*sy;
+    float yy = xp*sy + yr*cy;
+    corners[i].x = baseX + static_cast<int16_t>(roundf(xy * cScale));
+    corners[i].y = baseY + static_cast<int16_t>(roundf(yy * cScale));
+    corners[i].z = zp;
+  }
+
+  clearPetBuffer(kBlack);
+  for (int i = 0; i < 4; ++i) {
+    drawPetBufferLine(corners[i].x - kPetAreaX, corners[i].y - kPetAreaY,
+                      corners[(i+1)%4].x - kPetAreaX, corners[(i+1)%4].y - kPetAreaY,
+                      kGreen);
+  }
+
+  int16_t centroidX = 0, centroidY = 0;
+  for (int i = 0; i < 4; ++i) {
+    centroidX += corners[i].x - kPetAreaX;
+    centroidY += corners[i].y - kPetAreaY;
+  }
+  centroidX /= 4; centroidY /= 4;
+
+  display_.drawRgb565Bitmap(kPetAreaX, kPetAreaY, petBuffer, kPetAreaSize, kPetAreaSize);
 
   if (model.petAnimationVisible && model.petAnimationPath
       && model.petAnimationPath[0] != '\0') {
-    if (drawPetAnimation(model, offsetX, offsetY)) {
+    if (drawPetAnimation(model, centroidX + kPetAreaX - kScreenCenter,
+                         centroidY + kPetAreaY - kCubeCenterY)) {
       return;
     }
   }
 
-  display_.drawTextCentered(
-      model.primaryText,
-      122 + offsetY,
-      DisplayTextStyle::Primary,
-      kWhite);
+  display_.drawTextCentered(model.primaryText, centroidY + kPetAreaY,
+                            DisplayTextStyle::Primary, kWhite);
 }
 
 void ScreenRenderer::clearPetBuffer(uint16_t color) {
@@ -714,10 +733,7 @@ void ScreenRenderer::drawRadialSector(float centerDeg, uint16_t color) {
       color);
 }
 
-void ScreenRenderer::drawRadialFrame(
-    RadialMenuItem selectedItem,
-    bool calibrationMode,
-    uint8_t completedCount) {
+void ScreenRenderer::drawRadialFrame(RadialMenuItem selectedItem) {
   homeChromeDrawn_ = false;
   lastHomeContentKind_ = HomeContentKind::None;
   pet2WasActive = false;
@@ -737,13 +753,7 @@ void ScreenRenderer::drawRadialFrame(
   drawRadialSector(0.0f, radialItemColor(RadialMenuItem::NextPet,
                                          selectedItem == RadialMenuItem::NextPet));
 
-  if (calibrationMode) {
-    char stepText[12];
-    snprintf(stepText, sizeof(stepText), "%u/4", static_cast<unsigned>(completedCount));
-    display_.drawTextCentered(stepText, 218, DisplayTextStyle::Small, kMuted);
-  } else {
-    display_.drawTextCentered(radialItemLabel(selectedItem), 218, DisplayTextStyle::Small, kMuted);
-  }
+  display_.drawTextCentered(radialItemLabel(selectedItem), 218, DisplayTextStyle::Small, kMuted);
 }
 
 void ScreenRenderer::drawRadialCursor(float cursorX, float cursorY, uint16_t color) {

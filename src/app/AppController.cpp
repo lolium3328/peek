@@ -22,7 +22,6 @@ void AppController::begin() {
   fileSystem_.begin();
   fileSystemService_.begin();
   assetStore_.begin(fileSystem_);
-  radialMenu_.loadCalibration();
 
   if (!display_.begin()) {
     while (true) delay(1000);
@@ -89,33 +88,12 @@ void AppController::loop() {
       holdGestureConsumed_ = false;
       return;
     }
-    if (event.type == TouchEventType::ShortPress) {
-      enterRadialCalibration(now);
-      holdGestureConsumed_ = false;
-      return;
-    }
     if (event.type == TouchEventType::LongPress || event.type == TouchEventType::ExtraLongPress) {
       completeRadialMenu(now);
       holdGestureConsumed_ = true;
       return;
     }
     if (releasedNow) holdGestureConsumed_ = false;
-    return;
-  }
-
-  if (mode_ == AppMode::RadialCalibration) {
-    if (event.type == TouchEventType::ShortPress) {
-      confirmRadialCalibrationSample(now);
-      holdGestureConsumed_ = false;
-      return;
-    }
-    if (event.type == TouchEventType::LongPress || event.type == TouchEventType::ExtraLongPress) {
-      mode_ = AppMode::Normal;
-      holdGestureConsumed_ = true;
-      renderHomeText("cal cancel");
-      return;
-    }
-    updateRadialCalibration(now);
     return;
   }
 
@@ -239,7 +217,6 @@ void AppController::fillHomeModel(HomeScreenModel &model, const char *hintText) 
 const char *AppController::currentHomeHint() const {
   if (mode_ == AppMode::ImuLocked) return "imu locked";
   if (mode_ == AppMode::RadialMenu) return "menu";
-  if (mode_ == AppMode::RadialCalibration) return "cal";
   if (touch_.isPressed()) return "gesture";
   return pet_.isSleeping() ? "sleeping" : "hold + shake";
 }
@@ -381,21 +358,7 @@ void AppController::renderRadialMenuFrame() {
   model.cursorX = cr.cursorX;
   model.cursorY = cr.cursorY;
   model.imuReady = cr.valid;
-  model.calibratingHint = fabsf(radialMenu_.spinAccumulatedDeg()) > 180.0f;
   screen_.renderRadialMenu(model);
-  lastHomeRenderMs_ = millis();
-}
-
-void AppController::renderRadialCalibrationFrame() {
-  RadialCursorResult cr = radialMenu_.computeCursor(
-      imu_.pose(), cubeRollZeroDeg_, cubePitchZeroDeg_, cubeYawZeroDeg_);
-  RadialCalibrationModel model;
-  model.targetItem = radialMenu_.calibrationTarget();
-  model.completedCount = radialMenu_.calibrationStep();
-  model.cursorX = cr.cursorX;
-  model.cursorY = cr.cursorY;
-  model.failed = radialMenu_.calibrationFailed();
-  screen_.renderRadialCalibration(model);
   lastHomeRenderMs_ = millis();
 }
 
@@ -429,34 +392,6 @@ void AppController::completeRadialMenu(uint32_t now) {
   mode_ = AppMode::Normal;
   recordActivity(now);
   triggerRadialItem(selected, now);
-}
-
-void AppController::enterRadialCalibration(uint32_t now) {
-  mode_ = AppMode::RadialCalibration;
-  radialMenu_.startCalibration(now);
-  holdGestureConsumed_ = false;
-  recordActivity(now);
-  renderRadialCalibrationFrame();
-}
-
-void AppController::updateRadialCalibration(uint32_t now) {
-  radialMenu_.updateCalibration(now);
-  if (now - lastHomeRenderMs_ >= kHomeFrameIntervalMs) {
-    renderRadialCalibrationFrame();
-  }
-}
-
-void AppController::confirmRadialCalibrationSample(uint32_t now) {
-  radialMenu_.confirmSample(now, imu_.pose(), cubeRollZeroDeg_, cubePitchZeroDeg_, cubeYawZeroDeg_);
-  recordActivity(now);
-
-  if (!radialMenu_.isCalibrating()) {
-    mode_ = AppMode::Normal;
-    renderHomeText(radialMenu_.calibrationFailed() ? "menu cal fail" : "menu cal ok");
-    return;
-  }
-
-  renderRadialCalibrationFrame();
 }
 
 void AppController::triggerRadialItem(RadialMenuItem item, uint32_t now) {

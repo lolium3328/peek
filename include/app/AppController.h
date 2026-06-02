@@ -33,8 +33,7 @@ private:
     StatusView,
     Sleeping,
     ImuLocked,
-    RadialMenu,
-    RadialCalibration
+    RadialMenu
   };
 
   struct BatteryStatus {
@@ -48,7 +47,6 @@ private:
   void renderHomeFrame();
   void renderStatus();
   void renderRadialMenuFrame();
-  void renderRadialCalibrationFrame();
   void fillHomeModel(HomeScreenModel &model, const char *hintText);
   const char *currentHomeHint() const;
   bool isOffline(uint32_t now) const;
@@ -76,9 +74,6 @@ private:
   void enterRadialMenu(uint32_t now);
   void updateRadialMenu(uint32_t now);
   void completeRadialMenu(uint32_t now);
-  void enterRadialCalibration(uint32_t now);
-  void updateRadialCalibration(uint32_t now);
-  void confirmRadialCalibrationSample(uint32_t now);
   void triggerRadialItem(RadialMenuItem item, uint32_t now);
 
   DeviceConfig config_ = defaultDeviceConfig();
