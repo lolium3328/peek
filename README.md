@@ -38,9 +38,9 @@ cd apps/web
 bun run preview:png -- --mode all
 ```
 
-The generated images use the same constants, pixel algorithms, and font data
-used by `DisplayDriver.cpp` and `ScreenRenderer.cpp`. They are a development
-aid only; they do not edit or save device layouts.
+The generated images are rendered by a host-compiled `ScreenRenderer.cpp` with
+a PNG-backed `DisplayDriver`. They are a development aid only; they do not edit
+or save device layouts.
 
 The server is the primary control plane. Browsers talk to the Bun service, and
 the ESP32 talks back to the service from STA mode through `/api/device/sync`.

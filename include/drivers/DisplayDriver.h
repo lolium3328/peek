@@ -5,6 +5,10 @@
 class Arduino_DataBus;
 class Arduino_GFX;
 
+#ifdef PEEK_HOST_PREVIEW
+struct HostDisplayAccess;
+#endif
+
 enum class DisplayTextStyle {
   Small,
   Primary
@@ -33,6 +37,10 @@ public:
   void drawRgb565Bitmap(int16_t x, int16_t y, const uint16_t *pixels, int16_t width, int16_t height);
 
 private:
+#ifdef PEEK_HOST_PREVIEW
+  friend struct HostDisplayAccess;
+#endif
+
   void applyTextStyle(DisplayTextStyle style, uint16_t color);
   void drawBatteryArc(bool leftSide, uint8_t percent);
   void drawArcSegment(int16_t startDeg, int16_t sweepDeg, uint16_t color, uint8_t thickness);
