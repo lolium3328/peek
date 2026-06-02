@@ -44,13 +44,11 @@ bool AssetStore::saveManifestJson(const String &json) {
 
   File file = LittleFS.open(kManifestPath, "w");
   if (!file) {
-    Serial.println("Asset manifest save failed: open");
     return false;
   }
 
   file.print(json);
   file.close();
-  Serial.println("Asset manifest saved to LittleFS");
   return true;
 }
 
@@ -113,7 +111,6 @@ bool AssetStore::ensureDefaultManifest() {
 
   File file = LittleFS.open(kManifestPath, "w");
   if (!file) {
-    Serial.println("Default asset manifest create failed");
     return false;
   }
   file.print(kDefaultManifestJson);
@@ -124,7 +121,6 @@ bool AssetStore::ensureDefaultManifest() {
 bool AssetStore::loadManifest() {
   File file = LittleFS.open(kManifestPath, "r");
   if (!file) {
-    Serial.println("Asset manifest load failed: open");
     return false;
   }
 
@@ -135,8 +131,6 @@ bool AssetStore::loadManifest() {
   }
   refreshPet2AnimationPath();
 
-  Serial.print("Asset manifest loaded bytes ");
-  Serial.println(manifestJson_.length());
   return true;
 }
 

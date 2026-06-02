@@ -23,8 +23,6 @@ String trimTrailingSlash(const String &value) {
 
 bool writeHttpResponseToFile(HTTPClient &http, int status, const String &localPath, size_t expectedSize) {
   if (status < 200 || status >= 300) {
-    Serial.print("Asset download http ");
-    Serial.println(status);
     http.end();
     return false;
   }
@@ -32,7 +30,6 @@ bool writeHttpResponseToFile(HTTPClient &http, int status, const String &localPa
   const String tempPath = localPath + ".tmp";
   File file = LittleFS.open(tempPath, "w");
   if (!file) {
-    Serial.println("Asset download failed: open temp");
     http.end();
     return false;
   }
@@ -62,22 +59,15 @@ bool writeHttpResponseToFile(HTTPClient &http, int status, const String &localPa
 
   if (expectedSize > 0 && written != expectedSize) {
     LittleFS.remove(tempPath);
-    Serial.print("Asset download failed: size mismatch ");
-    Serial.print(written);
-    Serial.print("/");
-    Serial.println(expectedSize);
     return false;
   }
 
   LittleFS.remove(localPath);
   if (!LittleFS.rename(tempPath, localPath)) {
     LittleFS.remove(tempPath);
-    Serial.println("Asset download failed: rename");
     return false;
   }
 
-  Serial.print("Asset downloaded ");
-  Serial.println(localPath);
   return true;
 }
 } // namespace
@@ -88,12 +78,8 @@ void BackendClient::begin(const DeviceConfig &config, AssetStore &assetStore) {
   enabled_ = config.backendUrl.length() > 0;
 
   if (!enabled_) {
-    Serial.println("Backend sync disabled: empty backendUrl");
     return;
   }
-
-  Serial.print("Backend sync target ");
-  Serial.println(trimTrailingSlash(config.backendUrl));
 }
 
 void BackendClient::loop(
@@ -164,13 +150,10 @@ void BackendClient::syncNow(
 
   lastHttpStatus_ = status;
   if (!began) {
-    Serial.println("Backend sync failed: begin");
     return;
   }
 
   if (status < 200 || status >= 300) {
-    Serial.print("Backend sync http ");
-    Serial.println(status);
     http.end();
     return;
   }
@@ -178,14 +161,10 @@ void BackendClient::syncNow(
   http.end();
 
   if (!applySyncResponse(body)) {
-    Serial.print("Backend sync body bytes ");
-    Serial.println(body.length());
-    Serial.println("Backend sync response ignored");
     return;
   }
 
   lastSyncSuccessMs_ = now;
-  Serial.println("Backend sync ok");
 }
 
 String BackendClient::endpoint(const char *path) const {
@@ -240,8 +219,6 @@ bool BackendClient::applySyncResponse(const String &body) {
   JsonDocument doc;
   DeserializationError error = deserializeJson(doc, body);
   if (error) {
-    Serial.print("Backend sync json error ");
-    Serial.println(error.c_str());
     return false;
   }
 
@@ -283,7 +260,6 @@ void BackendClient::syncPet2Asset(JsonObject assets) {
     const char *deviceFormat = asset["deviceFormat"] | "";
     const size_t encodedSize = asset["encodedSize"] | 0;
     if (!devicePath || devicePath[0] == '\0' || String(deviceFormat) != "pka-rgb565-rle") {
-      Serial.println("Pet2 asset unsupported");
       return;
     }
 
@@ -294,7 +270,6 @@ void BackendClient::syncPet2Asset(JsonObject assets) {
     }
 
     if (!assetStore_->canStoreAsset(encodedSize, kAssetReserveBytes)) {
-      Serial.println("Pet2 asset download skipped: LittleFS space");
       return;
     }
 
@@ -329,7 +304,6 @@ bool BackendClient::downloadAssetFile(const String &url, const String &localPath
     }
   }
 
-  Serial.println("Asset download failed: begin");
   http.end();
   return false;
 }

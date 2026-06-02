@@ -24,7 +24,6 @@ void AppController::begin() {
   radialMenu_.loadCalibration();
 
   if (!display_.begin()) {
-    Serial.println("GC9A01 init failed");
     while (true) delay(1000);
   }
 
@@ -32,7 +31,6 @@ void AppController::begin() {
   const bool forceProvisioning = digitalRead(Pins::BUTTON) == LOW;
   if (forceProvisioning) {
     config_.wifiSsid = "";
-    Serial.println("Provisioning forced by boot button");
   }
 
   touch_.begin(config_);
@@ -50,7 +48,6 @@ void AppController::begin() {
   screen_.renderBoot(bootModel);
   delay(500);
 
-  Serial.println("Button input start");
   resetPet();
   lastActivityMs_ = millis();
 }
@@ -282,7 +279,6 @@ bool AppController::detectWakeMotion(uint32_t now) {
   const int32_t motion = labs(dx) + labs(dy) + labs(dz);
   if (motion < static_cast<int32_t>(kWakeMotionThreshold)) return false;
 
-  Serial.print("Wake motion "); Serial.println(motion);
   return true;
 }
 
@@ -295,7 +291,6 @@ void AppController::enterSleep(uint32_t now) {
   recordActivity(now);
   renderHomeText("sleeping");
   display_.setSleep(true);
-  Serial.print("Sleep timeout at "); Serial.println(now);
 }
 
 void AppController::wakeFromSleep(uint32_t now) {
@@ -303,7 +298,6 @@ void AppController::wakeFromSleep(uint32_t now) {
   mode_ = AppMode::Normal;
   recordActivity(now);
   renderHomeText(currentHomeHint());
-  Serial.println("Wake -> normal");
 }
 
 void AppController::enterImuLocked(uint32_t now) {
@@ -313,7 +307,6 @@ void AppController::enterImuLocked(uint32_t now) {
   cubePhysics_.stopThrow();
   recordActivity(now);
   renderHomeText("imu locked");
-  Serial.println("IMU input locked");
 }
 
 void AppController::exitImuLocked(uint32_t now) {
@@ -321,7 +314,6 @@ void AppController::exitImuLocked(uint32_t now) {
   resetShortPressSequence();
   recordActivity(now);
   renderHomeText("imu restored");
-  Serial.println("IMU input restored");
 }
 
 bool AppController::updateShortPressSequence(uint32_t now) {
@@ -330,7 +322,6 @@ bool AppController::updateShortPressSequence(uint32_t now) {
   }
   lastShortPressMs_ = now;
   ++shortPressCount_;
-  Serial.print("Short press sequence "); Serial.println(shortPressCount_);
   if (shortPressCount_ >= kImuLockShortPressCount) {
     enterImuLocked(now);
     return true;
@@ -353,43 +344,27 @@ void AppController::detectHeldPetGesture(uint32_t now) {
   recordActivity(now);
   cubePhysics_.stopThrow();
   renderHomeText("switched");
-  Serial.print("Hold shake -> pet "); Serial.println(pet_.currentPetText());
 }
 
 void AppController::loadScreenCalibration() {
   cubePhysics_.loadZeroCalibration(cubeRollZeroDeg_, cubePitchZeroDeg_, cubeYawZeroDeg_);
-  Serial.print("Screen calibration loaded ");
-  Serial.print(cubeRollZeroDeg_); Serial.print(",");
-  Serial.print(cubePitchZeroDeg_); Serial.print(",");
-  Serial.println(cubeYawZeroDeg_);
 }
 
 bool AppController::saveScreenCalibration() {
   const bool saved = cubePhysics_.saveZeroCalibration(
       imu_.pose(), cubeRollZeroDeg_, cubePitchZeroDeg_, cubeYawZeroDeg_);
-  if (saved) {
-    Serial.print("Screen calibration saved ");
-    Serial.print(cubeRollZeroDeg_); Serial.print(",");
-    Serial.print(cubePitchZeroDeg_); Serial.print(",");
-    Serial.println(cubeYawZeroDeg_);
-  }
   return saved;
 }
 
 void AppController::centerCube() {
   const ImuPose &pose = imu_.pose();
   if (!pose.valid) {
-    Serial.println("Cube center skipped: imu pose invalid");
     return;
   }
   cubeRollZeroDeg_ = pose.rollDeg;
   cubePitchZeroDeg_ = pose.pitchDeg;
   cubeYawZeroDeg_ = pose.yawDeg;
   cubePhysics_.centerPose(cubeRollZeroDeg_, cubePitchZeroDeg_, cubeYawZeroDeg_);
-  Serial.print("Cube centered at ");
-  Serial.print(cubeRollZeroDeg_); Serial.print(",");
-  Serial.print(cubePitchZeroDeg_); Serial.print(",");
-  Serial.println(cubeYawZeroDeg_);
 }
 
 void AppController::renderRadialMenuFrame() {
@@ -427,7 +402,6 @@ void AppController::enterRadialMenu(uint32_t now) {
   cubePhysics_.stopThrow();
   recordActivity(now);
   renderRadialMenuFrame();
-  Serial.println("Long press -> radial menu");
 }
 
 void AppController::updateRadialMenu(uint32_t now) {
@@ -457,7 +431,6 @@ void AppController::enterRadialCalibration(uint32_t now) {
   holdGestureConsumed_ = false;
   recordActivity(now);
   renderRadialCalibrationFrame();
-  Serial.println("Radial calibration started");
 }
 
 void AppController::updateRadialCalibration(uint32_t now) {
@@ -478,7 +451,6 @@ void AppController::confirmRadialCalibrationSample(uint32_t now) {
   }
 
   renderRadialCalibrationFrame();
-  Serial.print("Radial calibration sample "); Serial.println(radialMenu_.calibrationStep());
 }
 
 void AppController::triggerRadialItem(RadialMenuItem item, uint32_t now) {
@@ -488,24 +460,20 @@ void AppController::triggerRadialItem(RadialMenuItem item, uint32_t now) {
       mode_ = AppMode::StatusView;
       pet_.wakeForLongPress();
       renderStatus();
-      Serial.println("Radial menu -> status");
       return;
     case RadialMenuItem::PreviousPet:
       pet_.previousPet();
       cubePhysics_.stopThrow();
       renderHomeText("previous");
-      Serial.println("Radial menu -> previous pet");
       return;
     case RadialMenuItem::NextPet:
       pet_.advancePet();
       cubePhysics_.stopThrow();
       renderHomeText("next");
-      Serial.println("Radial menu -> next pet");
       return;
     case RadialMenuItem::Cancel:
     default:
       renderHomeText(currentHomeHint());
-      Serial.println("Radial menu -> cancel");
       return;
   }
 }
@@ -536,5 +504,4 @@ void AppController::handleExtraLongPress() {
   if (mode_ == AppMode::ImuLocked) return;
   resetShortPressSequence();
   renderHomeText("hold menu");
-  Serial.println("Extra long press ignored; use radial calibration");
 }

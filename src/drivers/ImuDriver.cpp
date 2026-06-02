@@ -17,8 +17,6 @@ constexpr uint8_t kRegisterAccelXHigh = 0x3B;
 constexpr uint8_t kRegisterPowerManagement1 = 0x6B;
 constexpr uint8_t kRegisterWhoAmI = 0x75;
 constexpr uint32_t kSampleIntervalMs = 50;
-constexpr uint32_t kLogIntervalMs = 500;
-constexpr uint32_t kRetryIntervalMs = 2000;
 constexpr uint8_t kGyroCalibrationSamples = 80;
 constexpr float kGyroSensitivity = 131.0f;
 constexpr float kComplementaryAlpha = 0.96f;
@@ -49,18 +47,10 @@ bool ImuDriver::begin() {
   lastSample_ = ImuSample();
   pose_ = ImuPose();
   lastSampleMs_ = 0;
-  lastLogMs_ = 0;
   lastPoseUpdateMs_ = 0;
   gyroBiasX_ = 0.0f;
   gyroBiasY_ = 0.0f;
   gyroBiasZ_ = 0.0f;
-
-  Serial.print("IMU: begin SDA=");
-  Serial.print(Pins::IMU_SDA);
-  Serial.print(" SCL=");
-  Serial.print(Pins::IMU_SCL);
-  Serial.print(" INT=");
-  Serial.println(Pins::IMU_INT);
 
   Wire.begin(Pins::IMU_SDA, Pins::IMU_SCL);
   Wire.setClock(400000);
@@ -73,22 +63,14 @@ bool ImuDriver::begin() {
   } else if (probeAddress(kAddressHigh)) {
     address_ = kAddressHigh;
   } else {
-    Serial.println("IMU: missing, expected 0x68 or 0x69");
     return false;
   }
 
   if (!readRegister(kRegisterWhoAmI, whoAmI_)) {
-    Serial.println("IMU: WHO_AM_I read failed");
     return false;
   }
 
-  Serial.print("IMU: found address 0x");
-  Serial.print(address_, HEX);
-  Serial.print(" whoami 0x");
-  Serial.println(whoAmI_, HEX);
-
   if (!isSupportedWhoAmI(whoAmI_)) {
-    Serial.println("IMU: unsupported WHO_AM_I");
     return false;
   }
 
@@ -97,61 +79,41 @@ bool ImuDriver::begin() {
   }
 
   ready_ = readSample();
-  Serial.println(ready_ ? "IMU: ready" : "IMU: first sample failed");
   return ready_;
 }
 
 void ImuDriver::update(uint32_t now) {
   if (!ready_) {
-    if (now - lastLogMs_ >= kRetryIntervalMs) {
-      lastLogMs_ = now;
-      Serial.println("IMU: offline, retrying");
-      scanBus();
+    scanBus();
 
-      if (probeAddress(kAddressLow)) {
-        address_ = kAddressLow;
-      } else if (probeAddress(kAddressHigh)) {
-        address_ = kAddressHigh;
-      } else {
-        Serial.println("IMU: still missing, expected 0x68 or 0x69");
-        return;
-      }
-
-      if (!readRegister(kRegisterWhoAmI, whoAmI_)) {
-        Serial.println("IMU: retry WHO_AM_I read failed");
-        return;
-      }
-
-      Serial.print("IMU: retry found address 0x");
-      Serial.print(address_, HEX);
-      Serial.print(" whoami 0x");
-      Serial.println(whoAmI_, HEX);
-
-      if (!isSupportedWhoAmI(whoAmI_)) {
-        Serial.println("IMU: retry unsupported WHO_AM_I");
-        return;
-      }
-
-      if (!configureDevice()) {
-        return;
-      }
-      ready_ = readSample();
-      Serial.println(ready_ ? "IMU: retry ready" : "IMU: retry sample failed");
+    if (probeAddress(kAddressLow)) {
+      address_ = kAddressLow;
+    } else if (probeAddress(kAddressHigh)) {
+      address_ = kAddressHigh;
+    } else {
+      return;
     }
+
+    if (!readRegister(kRegisterWhoAmI, whoAmI_)) {
+      return;
+    }
+
+    if (!isSupportedWhoAmI(whoAmI_)) {
+      return;
+    }
+
+    if (!configureDevice()) {
+      return;
+    }
+    ready_ = readSample();
     return;
   }
 
   if (now - lastSampleMs_ >= kSampleIntervalMs) {
     if (!readSample()) {
       ready_ = false;
-      Serial.println("IMU: read failed, marked offline");
       return;
     }
-  }
-
-  if (now - lastLogMs_ >= kLogIntervalMs) {
-    lastLogMs_ = now;
-    logSample();
   }
 }
 
@@ -177,7 +139,6 @@ const ImuPose &ImuDriver::pose() const {
 
 bool ImuDriver::configureDevice() {
   if (!writeRegister(kRegisterPowerManagement1, 0x00)) {
-    Serial.println("IMU: wake failed");
     return false;
   }
   delay(100);
@@ -197,7 +158,6 @@ bool ImuDriver::calibrateGyroBias() {
   uint8_t samples = 0;
   uint8_t buffer[14];
 
-  Serial.println("IMU: keep still for gyro calibration");
   for (uint8_t index = 0; index < kGyroCalibrationSamples; ++index) {
     if (readBytes(kRegisterAccelXHigh, buffer, sizeof(buffer))) {
       gyroXSum += readSigned16(buffer, 8);
@@ -209,7 +169,6 @@ bool ImuDriver::calibrateGyroBias() {
   }
 
   if (samples == 0) {
-    Serial.println("IMU: gyro calibration failed");
     return false;
   }
 
@@ -218,12 +177,6 @@ bool ImuDriver::calibrateGyroBias() {
   gyroBiasZ_ = static_cast<float>(gyroZSum) / samples;
   pose_.calibrated = true;
 
-  Serial.print("IMU: gyro bias ");
-  Serial.print(gyroBiasX_);
-  Serial.print(",");
-  Serial.print(gyroBiasY_);
-  Serial.print(",");
-  Serial.println(gyroBiasZ_);
   return true;
 }
 
@@ -233,20 +186,9 @@ void ImuDriver::resetPose() {
 }
 
 void ImuDriver::scanBus() {
-  Serial.println("IMU: I2C scan start");
-
-  bool foundAny = false;
   for (uint8_t address = 0x08; address <= 0x77; ++address) {
     Wire.beginTransmission(address);
-    if (Wire.endTransmission() == 0) {
-      foundAny = true;
-      Serial.print("IMU: I2C device 0x");
-      Serial.println(address, HEX);
-    }
-  }
-
-  if (!foundAny) {
-    Serial.println("IMU: I2C scan found no devices");
+    Wire.endTransmission();
   }
 }
 
@@ -341,29 +283,4 @@ void ImuDriver::updatePose(uint32_t now) {
                    + (1.0f - kComplementaryAlpha) * accelPitchDeg;
   pose_.yawDeg = wrapDegrees((pose_.yawDeg + gyroYawRate * dt) * 0.999f);
   pose_.valid = true;
-}
-
-void ImuDriver::logSample() const {
-  if (!lastSample_.valid) {
-    return;
-  }
-
-  Serial.print("IMU: acc ");
-  Serial.print(lastSample_.accelX);
-  Serial.print(",");
-  Serial.print(lastSample_.accelY);
-  Serial.print(",");
-  Serial.print(lastSample_.accelZ);
-  Serial.print(" gyro ");
-  Serial.print(lastSample_.gyroX);
-  Serial.print(",");
-  Serial.print(lastSample_.gyroY);
-  Serial.print(",");
-  Serial.print(lastSample_.gyroZ);
-  Serial.print(" pose ");
-  Serial.print(pose_.rollDeg);
-  Serial.print(",");
-  Serial.print(pose_.pitchDeg);
-  Serial.print(",");
-  Serial.println(pose_.yawDeg);
 }

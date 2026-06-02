@@ -13,7 +13,6 @@ void NetworkService::begin(const DeviceConfig &config) {
   enabled_ = config.wifiSsid.length() > 0;
 
   if (!enabled_) {
-    Serial.println("WiFi STA disabled: empty ssid");
     return;
   }
 
@@ -54,13 +53,8 @@ void NetworkService::startConnect(uint32_t now) {
   }
 
   lastConnectAttemptMs_ = now;
-  Serial.print("WiFi connecting to ");
-  Serial.println(config_->wifiSsid);
 
   if (config_->wifiUsername.length() > 0) {
-    // WPA2-Enterprise (PEAP/MSCHAPv2)
-    Serial.print("Using WPA2-Enterprise PEAP identity=");
-    Serial.println(config_->wifiUsername);
 
     WiFi.disconnect(true);
     WiFi.mode(WIFI_STA);

@@ -23,7 +23,6 @@ bool ConfigStore::begin() {
   Preferences prefs;
   ready_ = prefs.begin(kNamespace, false);
   if (!ready_) {
-    Serial.println("ConfigStore open failed");
     return false;
   }
   prefs.end();
@@ -48,10 +47,6 @@ DeviceConfig ConfigStore::load() const {
   config.extraLongPressMs = getUIntValue(kKeyExtraLongPressMs, config.extraLongPressMs);
   config.sleepTimeoutMs = getUIntValue(kKeySleepTimeoutMs, config.sleepTimeoutMs);
 
-  Serial.print("Config loaded wifi=");
-  Serial.print(config.wifiSsid.length() > 0 ? "set" : "empty");
-  Serial.print(" backend=");
-  Serial.println(config.backendUrl.length() > 0 ? "set" : "empty");
   return config;
 }
 
@@ -62,7 +57,6 @@ bool ConfigStore::save(const DeviceConfig &config) {
 
   Preferences prefs;
   if (!prefs.begin(kNamespace, false)) {
-    Serial.println("Config save failed: prefs open");
     return false;
   }
 
@@ -80,7 +74,6 @@ bool ConfigStore::save(const DeviceConfig &config) {
   prefs.putUInt(kKeySleepTimeoutMs, config.sleepTimeoutMs);
   prefs.end();
 
-  Serial.println("Config saved");
   return true;
 }
 
@@ -96,7 +89,6 @@ bool ConfigStore::reset() {
 
   const bool cleared = prefs.clear();
   prefs.end();
-  Serial.println(cleared ? "Config reset" : "Config reset failed");
   return cleared;
 }
 

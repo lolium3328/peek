@@ -62,7 +62,6 @@ void ProvisioningService::loop(uint32_t now) {
 
   server_.handleClient();
   if (restartRequested_ && now >= restartAtMs_) {
-    Serial.println("Provisioning saved, restarting");
     delay(50);
     ESP.restart();
   }
@@ -95,13 +94,6 @@ void ProvisioningService::startPortal() {
   server_.onNotFound([this]() { handleNotFound(); });
   server_.begin();
   active_ = true;
-
-  Serial.print("Provisioning AP started ssid=");
-  Serial.print(apSsid_);
-  Serial.print(" password=");
-  Serial.print(apPassword_);
-  Serial.print(" ip=");
-  Serial.println(WiFi.softAPIP());
 }
 
 void ProvisioningService::handleRoot() {

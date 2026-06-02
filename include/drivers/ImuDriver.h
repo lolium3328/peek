@@ -43,13 +43,11 @@ private:
   bool readRegister(uint8_t reg, uint8_t &value);
   bool readBytes(uint8_t reg, uint8_t *buffer, uint8_t length);
   bool readSample();
-  void logSample() const;
 
   bool ready_ = false;
   uint8_t address_ = 0;
   uint8_t whoAmI_ = 0;
   uint32_t lastSampleMs_ = 0;
-  uint32_t lastLogMs_ = 0;
   uint32_t lastPoseUpdateMs_ = 0;
   float gyroBiasX_ = 0.0f;
   float gyroBiasY_ = 0.0f;

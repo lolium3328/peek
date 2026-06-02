@@ -6,14 +6,9 @@
 bool FileSystem::begin() {
   ready_ = LittleFS.begin(true);
   if (!ready_) {
-    Serial.println("LittleFS mount failed");
     return false;
   }
 
-  Serial.print("LittleFS ready used/total ");
-  Serial.print(LittleFS.usedBytes());
-  Serial.print("/");
-  Serial.println(LittleFS.totalBytes());
   return true;
 }
 
