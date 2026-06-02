@@ -684,17 +684,38 @@ void ScreenRenderer::drawTinyBattery(int16_t x, int16_t y, uint8_t percent, uint
 void ScreenRenderer::drawRadialSector(float centerDeg, uint16_t color) {
   const float startDeg = centerDeg - 39.0f;
   const float endDeg = centerDeg + 39.0f;
+  const float innerRadius = 104.0f;
+  const float outerRadius = 114.0f;
+
   for (float deg = startDeg; deg < endDeg; deg += 2.0f) {
     const float radians = deg * DEG_TO_RAD;
     const float nextRadians = (deg + 2.0f) * DEG_TO_RAD;
-    for (float radius = 104.0f; radius <= 114.0f; radius += 2.0f) {
-      const int16_t x1 = kScreenCenter + static_cast<int16_t>(roundf(cosf(radians) * radius));
-      const int16_t y1 = kScreenCenter - static_cast<int16_t>(roundf(sinf(radians) * radius));
-      const int16_t x2 = kScreenCenter + static_cast<int16_t>(roundf(cosf(nextRadians) * radius));
-      const int16_t y2 = kScreenCenter - static_cast<int16_t>(roundf(sinf(nextRadians) * radius));
-      display_.drawLine(x1, y1, x2, y2, color);
-    }
+    const int16_t innerX1 = kScreenCenter + static_cast<int16_t>(roundf(cosf(radians) * innerRadius));
+    const int16_t innerY1 = kScreenCenter - static_cast<int16_t>(roundf(sinf(radians) * innerRadius));
+    const int16_t innerX2 = kScreenCenter + static_cast<int16_t>(roundf(cosf(nextRadians) * innerRadius));
+    const int16_t innerY2 = kScreenCenter - static_cast<int16_t>(roundf(sinf(nextRadians) * innerRadius));
+    const int16_t outerX1 = kScreenCenter + static_cast<int16_t>(roundf(cosf(radians) * outerRadius));
+    const int16_t outerY1 = kScreenCenter - static_cast<int16_t>(roundf(sinf(radians) * outerRadius));
+    const int16_t outerX2 = kScreenCenter + static_cast<int16_t>(roundf(cosf(nextRadians) * outerRadius));
+    const int16_t outerY2 = kScreenCenter - static_cast<int16_t>(roundf(sinf(nextRadians) * outerRadius));
+    display_.drawLine(innerX1, innerY1, innerX2, innerY2, color);
+    display_.drawLine(outerX1, outerY1, outerX2, outerY2, color);
   }
+
+  const float startRadians = startDeg * DEG_TO_RAD;
+  const float endRadians = endDeg * DEG_TO_RAD;
+  display_.drawLine(
+      kScreenCenter + static_cast<int16_t>(roundf(cosf(startRadians) * innerRadius)),
+      kScreenCenter - static_cast<int16_t>(roundf(sinf(startRadians) * innerRadius)),
+      kScreenCenter + static_cast<int16_t>(roundf(cosf(startRadians) * outerRadius)),
+      kScreenCenter - static_cast<int16_t>(roundf(sinf(startRadians) * outerRadius)),
+      color);
+  display_.drawLine(
+      kScreenCenter + static_cast<int16_t>(roundf(cosf(endRadians) * innerRadius)),
+      kScreenCenter - static_cast<int16_t>(roundf(sinf(endRadians) * innerRadius)),
+      kScreenCenter + static_cast<int16_t>(roundf(cosf(endRadians) * outerRadius)),
+      kScreenCenter - static_cast<int16_t>(roundf(sinf(endRadians) * outerRadius)),
+      color);
 }
 
 void ScreenRenderer::drawRadialFrame(
