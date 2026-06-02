@@ -12,6 +12,7 @@
 #include "physics/CubePhysics.h"
 #include "services/BackendClient.h"
 #include "services/ConfigStore.h"
+#include "services/FileSystemService.h"
 #include "services/NetworkService.h"
 #include "services/ProvisioningService.h"
 #include "storage/AssetStore.h"
@@ -86,6 +87,7 @@ private:
   AssetStore assetStore_;
   NetworkService network_;
   BackendClient backend_;
+  FileSystemService fileSystemService_;
   ProvisioningService provisioning_;
   DisplayDriver display_;
   ScreenRenderer screen_;
