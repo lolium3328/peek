@@ -782,7 +782,6 @@ void ScreenRenderer::resetRadialCache() {
   radialCursorDrawn_ = false;
   lastRadialCursorX_ = 0.0f;
   lastRadialCursorY_ = 0.0f;
-  lastRadialCompletedCount_ = 0;
 }
 
 const char *ScreenRenderer::radialItemLabel(RadialMenuItem item) const {

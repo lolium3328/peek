@@ -52,13 +52,4 @@ struct RadialMenuModel {
   float cursorX = 0.0f;
   float cursorY = 0.0f;
   bool imuReady = false;
-  bool calibratingHint = false;
-};
-
-struct RadialCalibrationModel {
-  RadialMenuItem targetItem = RadialMenuItem::Info;
-  uint8_t completedCount = 0;
-  float cursorX = 0.0f;
-  float cursorY = 0.0f;
-  bool failed = false;
 };

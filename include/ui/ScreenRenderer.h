@@ -12,7 +12,6 @@ public:
   void renderHomeFrame(const HomeScreenModel &model);
   void renderStatus(const StatusScreenModel &model);
   void renderRadialMenu(const RadialMenuModel &model);
-  void renderRadialCalibration(const RadialCalibrationModel &model);
 
 private:
   enum class HomeContentKind {
@@ -25,7 +24,6 @@ private:
   enum class RadialSurfaceKind {
     None,
     Menu,
-    Calibration,
   };
 
   void resetHomeCache();
@@ -50,7 +48,7 @@ private:
   void drawBottomHint(const char *hintText);
   void drawStatusPill(int16_t x, int16_t y, const char *text, uint16_t color);
   void drawRadialSector(float centerDeg, uint16_t color);
-  void drawRadialFrame(RadialMenuItem selectedItem, bool calibrationMode, uint8_t completedCount);
+  void drawRadialFrame(RadialMenuItem selectedItem);
   void drawRadialCursor(float cursorX, float cursorY, uint16_t color);
   void updateRadialCursor(float cursorX, float cursorY, uint16_t color);
   void resetRadialCache();
@@ -75,5 +73,4 @@ private:
   bool radialCursorDrawn_ = false;
   float lastRadialCursorX_ = 0.0f;
   float lastRadialCursorY_ = 0.0f;
-  uint8_t lastRadialCompletedCount_ = 0;
 };
