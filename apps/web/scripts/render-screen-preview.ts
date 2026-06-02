@@ -31,10 +31,6 @@ function parseArgs(argv: string[]) {
       args.out = normalize(argv[++index]);
     } else if (arg.startsWith("--out=")) {
       args.out = normalize(arg.slice("--out=".length));
-    } else if (arg === "--snapshot") {
-      index++;
-    } else if (arg.startsWith("--snapshot=")) {
-      continue;
     } else if (arg === "--help" || arg === "-h") {
       printHelp();
       process.exit(0);
@@ -148,7 +144,6 @@ function printHelp() {
 Options:
   -m, --mode <mode>       all, home, homeFrame, boot, status, or menu
   -o, --out <path>        output PNG path; with --mode all this is treated as an output directory
-      --snapshot <path>   accepted for compatibility; currently ignored
   -h, --help              show this help
 
 Without --mode, an interactive terminal menu is shown. In non-TTY environments,

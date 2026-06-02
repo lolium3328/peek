@@ -57,12 +57,6 @@ Args parseArgs(int argc, char **argv) {
       args.out = arg.substr(6);
       continue;
     }
-    if (arg == "--snapshot" || arg.rfind("--snapshot=", 0) == 0) {
-      if (arg == "--snapshot" && index + 1 < argc) {
-        ++index;
-      }
-      continue;
-    }
     throw std::runtime_error("Unknown argument: " + arg);
   }
   if (!isMode(args.mode)) {
