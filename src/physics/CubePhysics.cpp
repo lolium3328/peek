@@ -49,6 +49,7 @@ void CubePhysics::update(uint32_t now) {
   lastThrowUpdateMs_ = now;
   if (dt > 0.12f) dt = static_cast<float>(kHomeFrameIntervalMs) / 1000.0f;
   const float frameScale = dt / (static_cast<float>(kHomeFrameIntervalMs) / 1000.0f);
+  updateScale(now);
 
   if (cubeScaleRecovering_) {
     updateRecovery(now, dt, frameScale);
