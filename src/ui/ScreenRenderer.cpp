@@ -71,16 +71,6 @@ uint32_t readU32(File &file) {
 uint16_t stateColor(bool active) {
   return active ? kGreen : kMuted;
 }
-
-uint16_t batteryColor(uint8_t percent) {
-  if (percent < 24) {
-    return kRed;
-  }
-  if (percent < 55) {
-    return kAmber;
-  }
-  return kGreen;
-}
 } // namespace
 
 ScreenRenderer::ScreenRenderer(DisplayDriver &display) : display_(display) {}
@@ -122,8 +112,6 @@ void ScreenRenderer::renderStatus(const StatusScreenModel &model) {
   char imuText[20];
   char accelText[20];
   char poseText[24];
-  char localBatteryText[20];
-  char peerBatteryText[20];
 
   snprintf(buttonText, sizeof(buttonText), "button %s", model.buttonPressed ? "down" : "up");
   snprintf(rssiText, sizeof(rssiText), "rssi %d", model.wifiRssi);
@@ -134,19 +122,14 @@ void ScreenRenderer::renderStatus(const StatusScreenModel &model) {
   }
   snprintf(accelText, sizeof(accelText), "az %d", model.imuAccelZ);
   snprintf(poseText, sizeof(poseText), "rp %.0f %.0f", model.imuRollDeg, model.imuPitchDeg);
-  snprintf(localBatteryText, sizeof(localBatteryText), "A %u%%", model.localBatteryPercent);
-  snprintf(peerBatteryText, sizeof(peerBatteryText), "B %u%%", model.peerBatteryPercent);
 
   display_.clear(kBlack);
-  display_.drawBatteryBars(model.localBatteryPercent, model.peerBatteryPercent);
   display_.drawTextCentered("status", 48, DisplayTextStyle::Small, kBlue);
   display_.drawTextCentered(buttonText, 76, DisplayTextStyle::Small, kWhite);
   display_.drawTextCentered(imuText, 99, DisplayTextStyle::Small, stateColor(model.imuReady));
   display_.drawTextCentered(accelText, 122, DisplayTextStyle::Small, kWhite);
   display_.drawTextCentered(poseText, 145, DisplayTextStyle::Small, kWhite);
   display_.drawTextCentered(rssiText, 161, DisplayTextStyle::Small, kWhite);
-  display_.drawTextCentered(localBatteryText, 184, DisplayTextStyle::Small, batteryColor(model.localBatteryPercent));
-  display_.drawTextCentered(peerBatteryText, 199, DisplayTextStyle::Small, batteryColor(model.peerBatteryPercent));
   drawStatusPill(78, 211, model.backendConnected ? "backend ok" : "backend off", stateColor(model.backendConnected));
 }
 
@@ -179,8 +162,6 @@ void ScreenRenderer::resetHomeCache() {
   resetRadialCache();
   homeChromeDrawn_ = false;
   lastHomeContentKind_ = HomeContentKind::None;
-  lastLocalBatteryPercent_ = 0;
-  lastPeerBatteryPercent_ = 0;
   lastWifiConnected_ = false;
   lastBackendConnected_ = false;
   lastPoseAlert_ = false;
@@ -195,7 +176,6 @@ void ScreenRenderer::resetHomeCache() {
 }
 
 void ScreenRenderer::drawHomeChrome(const HomeScreenModel &model) {
-  display_.drawBatteryBars(model.localBatteryPercent, model.peerBatteryPercent);
   display_.drawCircle(kScreenCenter, kScreenCenter, 88, kLine);
   display_.drawCircle(kScreenCenter, kScreenCenter, 89, 0x0841);
   drawTopStatus(model);
@@ -204,8 +184,6 @@ void ScreenRenderer::drawHomeChrome(const HomeScreenModel &model) {
   }
   drawBottomHint(model.hintText);
 
-  lastLocalBatteryPercent_ = model.localBatteryPercent;
-  lastPeerBatteryPercent_ = model.peerBatteryPercent;
   lastWifiConnected_ = model.wifiConnected;
   lastBackendConnected_ = model.backendConnected;
   lastPoseAlert_ = model.poseAlert;
@@ -221,13 +199,6 @@ bool ScreenRenderer::updateHomeChrome(const HomeScreenModel &model) {
   if (model.poseAlert != lastPoseAlert_) {
     renderHome(model);
     return true;
-  }
-
-  if (model.localBatteryPercent != lastLocalBatteryPercent_
-      || model.peerBatteryPercent != lastPeerBatteryPercent_) {
-    display_.drawBatteryBars(model.localBatteryPercent, model.peerBatteryPercent);
-    lastLocalBatteryPercent_ = model.localBatteryPercent;
-    lastPeerBatteryPercent_ = model.peerBatteryPercent;
   }
 
   if (textChanged(lastLocalWeather_, model.localWeather)
@@ -670,15 +641,6 @@ void ScreenRenderer::drawStatusPill(int16_t x, int16_t y, const char *text, uint
   display_.drawRoundRect(x, y, 84, 23, 10, kLine);
   display_.fillCircle(x + 12, y + 11, 3, color);
   display_.drawText(text, x + 22, y + 15, DisplayTextStyle::Small, kWhite);
-}
-
-void ScreenRenderer::drawTinyBattery(int16_t x, int16_t y, uint8_t percent, uint16_t color) {
-  const int16_t fillWidth = (18 * percent) / 100;
-  display_.drawRect(x, y, 21, 9, kLine);
-  display_.fillRect(x + 21, y + 3, 2, 3, kLine);
-  if (fillWidth > 0) {
-    display_.fillRect(x + 2, y + 2, fillWidth, 5, color);
-  }
 }
 
 void ScreenRenderer::drawRadialSector(float centerDeg, uint16_t color) {

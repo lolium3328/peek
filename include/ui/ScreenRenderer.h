@@ -47,7 +47,6 @@ private:
   void drawConnectionDots(bool wifiConnected, bool backendConnected);
   void drawBottomHint(const char *hintText);
   void drawStatusPill(int16_t x, int16_t y, const char *text, uint16_t color);
-  void drawTinyBattery(int16_t x, int16_t y, uint8_t percent, uint16_t color);
   void drawRadialSector(float centerDeg, uint16_t color);
   void drawRadialFrame(RadialMenuItem selectedItem, bool calibrationMode, uint8_t completedCount);
   void drawRadialCursor(float cursorX, float cursorY, uint16_t color);
@@ -59,8 +58,6 @@ private:
   DisplayDriver &display_;
   bool homeChromeDrawn_ = false;
   HomeContentKind lastHomeContentKind_ = HomeContentKind::None;
-  uint8_t lastLocalBatteryPercent_ = 0;
-  uint8_t lastPeerBatteryPercent_ = 0;
   bool lastWifiConnected_ = false;
   bool lastBackendConnected_ = false;
   bool lastPoseAlert_ = false;

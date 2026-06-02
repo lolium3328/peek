@@ -27,24 +27,11 @@ struct HostDisplayAccess {
 namespace {
 constexpr int16_t kScreenSize = 240;
 constexpr int16_t kScreenCenter = kScreenSize / 2;
-constexpr int16_t kBatteryArcRadius = 109;
-constexpr int16_t kLeftBatteryStartDeg = 142;
-constexpr int16_t kRightBatteryStartDeg = 38;
-constexpr int16_t kBatteryArcSweepDeg = 76;
-constexpr uint8_t kBatteryArcThickness = 1;
-constexpr uint8_t kBatteryTrackThickness = 1;
-constexpr int16_t kArcStepDeg = 1;
-constexpr uint16_t kBatteryTrackColor = 0x18E3;
-constexpr uint16_t kBatteryHighColor = 0x05F4;
-constexpr uint16_t kBatteryMidColor = 0xFDC0;
-constexpr uint16_t kBatteryLowColor = 0xF9C6;
 
 struct HostState {
   std::array<uint16_t, kScreenSize * kScreenSize> pixels{};
   uint16_t textColor = 0xFFFF;
   DisplayTextStyle textStyle = DisplayTextStyle::Small;
-  uint8_t leftBatteryPercent = 92;
-  uint8_t rightBatteryPercent = 79;
 };
 
 constexpr uint8_t kGlcdFont[] = {
@@ -86,27 +73,6 @@ HostState &state(DisplayDriver &display) {
 
 const HostState &state(const DisplayDriver &display) {
   return *reinterpret_cast<const HostState *>(HostDisplayAccess::bus(display));
-}
-
-uint8_t clampPercent(uint8_t percent) {
-  return percent > 100 ? 100 : percent;
-}
-
-uint16_t batteryColor(uint8_t percent) {
-  if (percent < 24) {
-    return kBatteryLowColor;
-  }
-  if (percent < 55) {
-    return kBatteryMidColor;
-  }
-  return kBatteryHighColor;
-}
-
-uint16_t scaleColor(uint16_t color, uint8_t amount) {
-  const uint8_t r = ((color >> 11) & 0x1F) * amount / 255;
-  const uint8_t g = ((color >> 5) & 0x3F) * amount / 255;
-  const uint8_t b = (color & 0x1F) * amount / 255;
-  return (static_cast<uint16_t>(r) << 11) | (static_cast<uint16_t>(g) << 5) | b;
 }
 
 void writePixel(HostState &s, int16_t x, int16_t y, uint16_t color) {
@@ -338,7 +304,6 @@ void DisplayDriver::clear(uint16_t color) {
 
 void DisplayDriver::drawTextCentered(const char *text) {
   clear(0x0000);
-  drawBatteryBars();
   drawTextCentered(text, kScreenCenter, DisplayTextStyle::Primary, 0xFFFF);
 }
 
@@ -383,23 +348,6 @@ void DisplayDriver::drawText(const char *text, int16_t x, int16_t y, DisplayText
       cursorX += 6;
     }
   }
-}
-
-void DisplayDriver::setBatteryBars(uint8_t leftPercent, uint8_t rightPercent) {
-  HostState &s = state(*this);
-  s.leftBatteryPercent = clampPercent(leftPercent);
-  s.rightBatteryPercent = clampPercent(rightPercent);
-}
-
-void DisplayDriver::drawBatteryBars() {
-  HostState &s = state(*this);
-  drawBatteryArc(true, s.leftBatteryPercent);
-  drawBatteryArc(false, s.rightBatteryPercent);
-}
-
-void DisplayDriver::drawBatteryBars(uint8_t leftPercent, uint8_t rightPercent) {
-  setBatteryBars(leftPercent, rightPercent);
-  drawBatteryBars();
 }
 
 void DisplayDriver::drawCircle(int16_t x, int16_t y, int16_t radius, uint16_t color) {
@@ -509,45 +457,6 @@ void DisplayDriver::applyTextStyle(DisplayTextStyle style, uint16_t color) {
   HostState &s = state(*this);
   s.textStyle = style;
   s.textColor = color;
-}
-
-void DisplayDriver::drawBatteryArc(bool leftSide, uint8_t percent) {
-  const uint8_t clampedPercent = clampPercent(percent);
-  const int16_t startDeg = leftSide ? kLeftBatteryStartDeg : kRightBatteryStartDeg;
-  const int16_t sweepDeg = leftSide ? kBatteryArcSweepDeg : -kBatteryArcSweepDeg;
-  const int16_t fillSweepDeg = (sweepDeg * clampedPercent) / 100;
-  drawArcSegment(startDeg, sweepDeg, kBatteryTrackColor, kBatteryTrackThickness);
-  if (fillSweepDeg != 0) {
-    drawArcSegment(startDeg, fillSweepDeg, batteryColor(clampedPercent), kBatteryArcThickness);
-  }
-}
-
-void DisplayDriver::drawArcSegment(int16_t startDeg, int16_t sweepDeg, uint16_t color, uint8_t thickness) {
-  const int16_t coreHalfWidth = thickness > 1 ? 1 : 0;
-  const uint16_t edgeColor = scaleColor(color, 92);
-  drawArcLine(startDeg, sweepDeg, kBatteryArcRadius - coreHalfWidth - 1, edgeColor);
-  drawArcLine(startDeg, sweepDeg, kBatteryArcRadius + coreHalfWidth + 1, edgeColor);
-  for (int16_t offset = -coreHalfWidth; offset <= coreHalfWidth; ++offset) {
-    drawArcLine(startDeg, sweepDeg, kBatteryArcRadius + offset, color);
-  }
-}
-
-void DisplayDriver::drawArcLine(int16_t startDeg, int16_t sweepDeg, int16_t radius, uint16_t color) {
-  const int16_t step = sweepDeg >= 0 ? kArcStepDeg : -kArcStepDeg;
-  const int16_t endDeg = startDeg + sweepDeg;
-  for (int16_t deg = startDeg; deg != endDeg; deg += step) {
-    int16_t nextDeg = deg + step;
-    if (sweepDeg >= 0 ? nextDeg > endDeg : nextDeg < endDeg) {
-      nextDeg = endDeg;
-    }
-    const float radians = deg * DEG_TO_RAD;
-    const float nextRadians = nextDeg * DEG_TO_RAD;
-    const int16_t x0 = kScreenCenter + static_cast<int16_t>(std::round(std::cos(radians) * radius));
-    const int16_t y0 = kScreenCenter + static_cast<int16_t>(std::round(std::sin(radians) * radius));
-    const int16_t x1 = kScreenCenter + static_cast<int16_t>(std::round(std::cos(nextRadians) * radius));
-    const int16_t y1 = kScreenCenter + static_cast<int16_t>(std::round(std::sin(nextRadians) * radius));
-    drawLine(x0, y0, x1, y1, color);
-  }
 }
 
 bool writeDisplayPng(DisplayDriver &display, const char *path) {

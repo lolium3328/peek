@@ -80,8 +80,6 @@ HomeScreenModel homeModel(bool cubeVisible = true) {
   model.peerWeather = "--";
   model.localLabel = "A";
   model.peerLabel = "B";
-  model.localBatteryPercent = 92;
-  model.peerBatteryPercent = 79;
   model.wifiConnected = false;
   model.backendConnected = false;
   model.poseAlert = false;
@@ -108,8 +106,6 @@ void renderMode(ScreenRenderer &renderer, const std::string &mode) {
     StatusScreenModel model;
     model.buttonPressed = false;
     model.wifiRssi = 0;
-    model.localBatteryPercent = 92;
-    model.peerBatteryPercent = 79;
     model.backendConnected = false;
     model.imuReady = true;
     model.imuAddress = 0;

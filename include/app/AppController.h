@@ -62,6 +62,9 @@ private:
   void exitImuLocked(uint32_t now);
   bool updateShortPressSequence(uint32_t now);
   void resetShortPressSequence();
+  void handleCompletedClick();
+  void handleLongPress();
+  void handleExtraLongPress();
 
   void detectHeldPetGesture(uint32_t now);
 

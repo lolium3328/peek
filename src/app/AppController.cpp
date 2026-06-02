@@ -195,8 +195,6 @@ void AppController::renderStatus() {
   StatusScreenModel model;
   model.buttonPressed = touch_.isPressed();
   model.wifiRssi = static_cast<int8_t>(network_.rssi());
-  model.localBatteryPercent = localBattery().percent;
-  model.peerBatteryPercent = 79;
   model.backendConnected = !provisioning_.isActive() && backend_.isConnected(millis());
   model.imuReady = imu_.isReady();
   model.imuAddress = imu_.address();
@@ -223,8 +221,6 @@ void AppController::fillHomeModel(HomeScreenModel &model, const char *hintText) 
                               : hintText);
   model.localWeather = "--";
   model.peerWeather = "--";
-  model.localBatteryPercent = localBattery().percent;
-  model.peerBatteryPercent = 79;
   model.wifiConnected = network_.isConnected();
   model.backendConnected = !provisioning_.isActive() && backend_.isConnected(now);
   model.poseAlert = isLowBattery();
