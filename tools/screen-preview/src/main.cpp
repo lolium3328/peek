@@ -18,13 +18,13 @@ struct Args {
 void printHelp() {
   std::cout << "Usage: peek-screen-preview [options]\n\n"
             << "Options:\n"
-            << "  -m, --mode <mode>   all, home, homeFrame, boot, status, or menu\n"
+            << "  -m, --mode <mode>   all, home, homeFrame, boot, status, menu, or petThrow\n"
             << "  -o, --out <path>    output PNG path; with --mode all this is treated as an output directory\n"
             << "  -h, --help          show this help\n";
 }
 
 bool isMode(const std::string &mode) {
-  return mode == "all" || mode == "home" || mode == "homeFrame" || mode == "boot" || mode == "status" || mode == "menu";
+  return mode == "all" || mode == "home" || mode == "homeFrame" || mode == "boot" || mode == "status" || mode == "menu" || mode == "petThrow";
 }
 
 Args parseArgs(int argc, char **argv) {
@@ -67,7 +67,7 @@ Args parseArgs(int argc, char **argv) {
 
 std::vector<std::string> selectedModes(const std::string &mode) {
   if (mode == "all") {
-    return {"home", "homeFrame", "boot", "status", "menu"};
+    return {"home", "homeFrame", "boot", "status", "menu", "petThrow"};
   }
   return {mode};
 }
@@ -113,6 +113,26 @@ void renderMode(ScreenRenderer &renderer, const std::string &mode) {
     model.imuRollDeg = 0.0f;
     model.imuPitchDeg = 0.0f;
     renderer.renderStatus(model);
+    return;
+  }
+
+  if (mode == "petThrow") {
+    HomeScreenModel throwModel;
+    throwModel.primaryText = "Pet 3";
+    throwModel.hintText = "hold + shake";
+    throwModel.localWeather = "--";
+    throwModel.peerWeather = "--";
+    throwModel.localLabel = "A";
+    throwModel.peerLabel = "B";
+    throwModel.cubeVisible = true;
+    throwModel.petThrowActive = true;
+    throwModel.cubeOffsetX = 25.0f;
+    throwModel.cubeOffsetY = -15.0f;
+    throwModel.cubeScale = 18.0f;
+    throwModel.cubeRollDeg = 12.0f;
+    throwModel.cubePitchDeg = -8.0f;
+    throwModel.cubeYawDeg = 0.0f;
+    renderer.renderHome(throwModel);
     return;
   }
 

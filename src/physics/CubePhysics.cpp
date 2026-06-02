@@ -119,8 +119,8 @@ void CubePhysics::applyToModel(HomeScreenModel &model, const ImuPose &pose,
 }
 
 bool CubePhysics::detectThrow(uint32_t now, const ImuSample &sample,
-                               bool isCubePet, bool touchPressed) {
-  if (touchPressed || !isCubePet) return false;
+                               bool touchPressed) {
+  if (touchPressed) return false;
 
   int32_t dx = 0, dy = 0, dz = 0;
   if (!readMotionDelta(sample, dx, dy, dz)) return false;

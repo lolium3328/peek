@@ -42,7 +42,9 @@ private:
   void clearPetBuffer(uint16_t color);
   void putPetPixel(int16_t x, int16_t y, uint16_t color);
   void drawPetBufferLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color);
-  bool drawPetAnimation(const HomeScreenModel &model);
+  void renderPetContentThrown(const HomeScreenModel &model);
+  bool drawPetAnimation(const HomeScreenModel &model,
+                        int16_t offsetX = 0, int16_t offsetY = 0);
   void drawWeatherChip(int16_t x, const char *label, const char *weather);
   void drawConnectionDots(bool wifiConnected, bool backendConnected);
   void drawBottomHint(const char *hintText);

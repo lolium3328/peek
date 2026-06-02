@@ -20,6 +20,7 @@ void AppController::begin() {
   configStore_.begin();
   config_ = configStore_.load();
   fileSystem_.begin();
+  fileSystemService_.begin();
   assetStore_.begin(fileSystem_);
   radialMenu_.loadCalibration();
 
@@ -53,6 +54,8 @@ void AppController::begin() {
 }
 
 void AppController::loop() {
+  fileSystemService_.loop();
+
   const uint32_t now = millis();
   provisioning_.loop(now);
   const bool provisioningActive = provisioning_.isActive();
@@ -119,7 +122,7 @@ void AppController::loop() {
   if (mode_ != AppMode::ImuLocked) {
     cubePhysics_.update(now);
     if (cubePhysics_.detectThrow(now, imu_.lastSample(),
-                                  pet_.isCubePet(), touch_.isPressed())) {
+                                  touch_.isPressed())) {
       recordActivity(now);
     }
   }
@@ -227,6 +230,9 @@ void AppController::fillHomeModel(HomeScreenModel &model, const char *hintText) 
   if (mode_ != AppMode::ImuLocked && pet_.isPet2() && assetStore_.hasPet2Animation()) {
     model.petAnimationVisible = true;
     model.petAnimationPath = assetStore_.pet2AnimationPath().c_str();
+  }
+  if (!pet_.isCubePet() && cubePhysics_.isThrown()) {
+    model.petThrowActive = true;
   }
 }
 

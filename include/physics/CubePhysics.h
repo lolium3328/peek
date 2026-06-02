@@ -12,7 +12,7 @@ public:
                     float rollZero, float pitchZero, float yawZero) const;
 
   bool detectThrow(uint32_t now, const ImuSample &sample,
-                   bool isCubePet, bool touchPressed);
+                   bool touchPressed);
   bool detectHeldShake(uint32_t now, const ImuSample &sample,
                        bool touchPressed);
 

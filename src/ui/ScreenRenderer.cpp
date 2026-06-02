@@ -231,6 +231,15 @@ bool ScreenRenderer::updateHomeChrome(const HomeScreenModel &model) {
 }
 
 void ScreenRenderer::renderHomeContent(const HomeScreenModel &model, bool force) {
+  if (model.petThrowActive) {
+    renderPetContentThrown(model);
+    copyText(lastPrimaryText_, sizeof(lastPrimaryText_), model.primaryText);
+    lastAnimationPath_[0] = '\0';
+    lastHomeContentKind_ = HomeContentKind::None;
+    pet2WasActive = false;
+    return;
+  }
+
   HomeContentKind kind = homeContentKind(model);
   if (kind == HomeContentKind::Animation && !model.petAnimationPath) {
     kind = HomeContentKind::Text;
@@ -422,6 +431,30 @@ void ScreenRenderer::drawPetCubeBuffered(const HomeScreenModel &model) {
   display_.drawRgb565Bitmap(kPetAreaX, kPetAreaY, petBuffer, kPetAreaSize, kPetAreaSize);
 }
 
+void ScreenRenderer::renderPetContentThrown(const HomeScreenModel &model) {
+  clearPetArea();
+
+  const float radRoll = model.cubeRollDeg * DEG_TO_RAD;
+  const float radPitch = model.cubePitchDeg * DEG_TO_RAD;
+  const float flutterX = sinf(radRoll) * 3.0f;
+  const float flutterY = cosf(radPitch) * 3.0f;
+  const int16_t offsetX = static_cast<int16_t>(roundf(model.cubeOffsetX + flutterX));
+  const int16_t offsetY = static_cast<int16_t>(roundf(model.cubeOffsetY + flutterY));
+
+  if (model.petAnimationVisible && model.petAnimationPath
+      && model.petAnimationPath[0] != '\0') {
+    if (drawPetAnimation(model, offsetX, offsetY)) {
+      return;
+    }
+  }
+
+  display_.drawTextCentered(
+      model.primaryText,
+      122 + offsetY,
+      DisplayTextStyle::Primary,
+      kWhite);
+}
+
 void ScreenRenderer::clearPetBuffer(uint16_t color) {
   for (uint16_t index = 0; index < kPetAreaSize * kPetAreaSize; ++index) {
     petBuffer[index] = color;
@@ -464,7 +497,8 @@ void ScreenRenderer::drawPetBufferLine(
   }
 }
 
-bool ScreenRenderer::drawPetAnimation(const HomeScreenModel &model) {
+bool ScreenRenderer::drawPetAnimation(const HomeScreenModel &model,
+                                       int16_t offsetX, int16_t offsetY) {
   if (!model.petAnimationPath || model.petAnimationPath[0] == '\0') {
     return false;
   }
@@ -520,8 +554,8 @@ bool ScreenRenderer::drawPetAnimation(const HomeScreenModel &model) {
     return false;
   }
 
-  const int16_t originX = kScreenCenter - static_cast<int16_t>(width) / 2;
-  const int16_t originY = kCubeCenterY - static_cast<int16_t>(height) / 2;
+  const int16_t originX = kScreenCenter - static_cast<int16_t>(width) / 2 + offsetX;
+  const int16_t originY = kCubeCenterY - static_cast<int16_t>(height) / 2 + offsetY;
 
   // 动画尺寸变化时重新分配双缓存
   const bool sizeChanged = (width != pet2BufWidth || height != pet2BufHeight);
@@ -541,8 +575,8 @@ bool ScreenRenderer::drawPetAnimation(const HomeScreenModel &model) {
 
   // 选择目标缓存（交替写入）
   uint16_t* const curBuf = pet2BufToggle ? pet2BufB : pet2BufA;
-  // 首帧条件：尺寸变化 / 上一帧 pet2 未活跃（从 cube/text 切换过来）
-  const bool forceFull = sizeChanged || !pet2WasActive;
+  // 首帧条件：尺寸变化 / 上一帧 pet2 未活跃（从 cube/text 切换过来）/ 非零偏移（throw 位置变化）
+  const bool forceFull = sizeChanged || !pet2WasActive || offsetX != 0 || offsetY != 0;
 
   // RLE 解码到目标缓存（线性写入，无需逐行推屏）
   uint32_t remainingPixels = static_cast<uint32_t>(width) * height;

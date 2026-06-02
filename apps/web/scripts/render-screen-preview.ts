@@ -4,9 +4,9 @@ import { dirname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
-type PreviewScreenMode = "home" | "homeFrame" | "boot" | "status" | "menu";
+type PreviewScreenMode = "home" | "homeFrame" | "boot" | "status" | "menu" | "petThrow";
 
-const modes = ["home", "homeFrame", "boot", "status", "menu"] as const;
+const modes = ["home", "homeFrame", "boot", "status", "menu", "petThrow"] as const;
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = normalize(join(scriptDir, "..", "..", ".."));
 const buildDir = join(repoRoot, ".peek-preview", "build");
