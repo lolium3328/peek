@@ -80,6 +80,28 @@ void MotorDriver::vibrate(uint8_t strength, uint32_t durationMs) {
   writeRegister(kRegisterMode, kModeInternalTrigger);
 }
 
+void MotorDriver::setRealtimeStrength(uint8_t strength) {
+  if (!ready_) {
+    return;
+  }
+
+  if (strength > 127) {
+    strength = 127;
+  }
+
+  writeRegister(kRegisterMode, kModeRealtimePlayback);
+  writeRegister(kRegisterRealtimePlayback, strength);
+}
+
+void MotorDriver::stop() {
+  if (!ready_) {
+    return;
+  }
+
+  writeRegister(kRegisterRealtimePlayback, 0);
+  writeRegister(kRegisterMode, kModeInternalTrigger);
+}
+
 bool MotorDriver::writeRegister(uint8_t reg, uint8_t value) {
   Wire.beginTransmission(kAddress);
   Wire.write(reg);

@@ -16,6 +16,8 @@ public:
   void play(Effect effect);
   void play(uint8_t effect);
   void vibrate(uint8_t strength, uint32_t durationMs);
+  void setRealtimeStrength(uint8_t strength);
+  void stop();
 
 private:
   bool writeRegister(uint8_t reg, uint8_t value);

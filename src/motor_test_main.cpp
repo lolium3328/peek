@@ -21,6 +21,8 @@ void printMenu() {
   Serial.println("  1-117        play a library effect");
   Serial.println("  e 12         play a library effect");
   Serial.println("  v 80 200     vibrate strength 80 for 200ms");
+  Serial.println("  s 80         set realtime strength 80");
+  Serial.println("  x            stop realtime vibration");
   Serial.println("  r            replay the last command");
   Serial.print("> ");
 }
@@ -64,6 +66,25 @@ void vibrate(uint8_t strength, uint32_t durationMs) {
   Serial.print("> ");
 }
 
+void setRealtimeStrength(uint8_t strength) {
+  if (strength > 127) {
+    Serial.println("Strength must be 0-127.");
+    Serial.print("> ");
+    return;
+  }
+
+  Serial.print("Realtime strength ");
+  Serial.println(strength);
+  motor.setRealtimeStrength(strength);
+  Serial.print("> ");
+}
+
+void stopMotor() {
+  Serial.println("Stopping motor");
+  motor.stop();
+  Serial.print("> ");
+}
+
 int readNumber(const String &command, int &offset) {
   while (offset < command.length() && command[offset] == ' ') {
     ++offset;
@@ -96,6 +117,11 @@ void handleCommand(String command) {
     return;
   }
 
+  if (command == "x" || command == "X") {
+    stopMotor();
+    return;
+  }
+
   if (command[0] == 'e' || command[0] == 'E') {
     int offset = 1;
     const int effect = readNumber(command, offset);
@@ -111,9 +137,16 @@ void handleCommand(String command) {
     return;
   }
 
+  if (command[0] == 's' || command[0] == 'S') {
+    int offset = 1;
+    const int strength = readNumber(command, offset);
+    setRealtimeStrength(static_cast<uint8_t>(strength));
+    return;
+  }
+
   const int effect = command.toInt();
   if (effect < 1 || effect > 117) {
-    Serial.println("Enter 1-117, e <effect>, v <strength> <ms>, or r.");
+    Serial.println("Enter 1-117, e <effect>, v <strength> <ms>, s <strength>, x, or r.");
     Serial.print("> ");
     return;
   }

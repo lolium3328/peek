@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DRV2605L Serial Control</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f4f6f8;
+      color: #18202a;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+    header {
+      padding: 18px 24px;
+      background: #ffffff;
+      border-bottom: 1px solid #d9e0e7;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+    main {
+      width: min(1080px, 100%);
+      margin: 0 auto;
+      padding: 24px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+    section {
+      background: #ffffff;
+      border: 1px solid #d9e0e7;
+      border-radius: 8px;
+      padding: 18px;
+    }
+    .wide {
+      grid-column: 1 / -1;
+    }
+    h2 {
+      margin: 0 0 14px;
+      font-size: 15px;
+      font-weight: 700;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 120px 1fr 64px;
+      align-items: center;
+      gap: 12px;
+      margin: 12px 0;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    button {
+      border: 1px solid #aeb8c3;
+      background: #ffffff;
+      color: #18202a;
+      border-radius: 6px;
+      min-height: 36px;
+      padding: 0 13px;
+      font: inherit;
+      cursor: pointer;
+    }
+    button.primary {
+      background: #156c8c;
+      border-color: #156c8c;
+      color: #ffffff;
+    }
+    button.danger {
+      background: #9f2f3f;
+      border-color: #9f2f3f;
+      color: #ffffff;
+    }
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
+    input[type="range"] {
+      width: 100%;
+      accent-color: #156c8c;
+    }
+    input[type="number"] {
+      width: 100%;
+      min-height: 34px;
+      border: 1px solid #aeb8c3;
+      border-radius: 6px;
+      padding: 0 8px;
+      font: inherit;
+    }
+    .status {
+      font-size: 14px;
+      color: #4d5b68;
+    }
+    .log {
+      height: 220px;
+      overflow: auto;
+      padding: 12px;
+      background: #111820;
+      color: #d9f3ff;
+      border-radius: 6px;
+      font: 13px/1.45 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+      white-space: pre-wrap;
+    }
+    .timeline {
+      min-height: 36px;
+      display: flex;
+      gap: 2px;
+      align-items: end;
+      padding: 8px;
+      border: 1px solid #d9e0e7;
+      border-radius: 6px;
+      background: #f8fafb;
+      overflow-x: auto;
+    }
+    .bar {
+      width: 5px;
+      min-width: 5px;
+      background: #156c8c;
+      border-radius: 2px 2px 0 0;
+    }
+    @media (max-width: 780px) {
+      main {
+        grid-template-columns: 1fr;
+        padding: 14px;
+      }
+      header {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+      .row {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>DRV2605L Serial Control</h1>
+    <div class="actions">
+      <button id="connect" class="primary">连接串口</button>
+      <button id="disconnect" disabled>断开</button>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <h2>预设效果</h2>
+      <div class="row">
+        <label for="effect">Effect</label>
+        <input id="effect" type="range" min="1" max="117" value="12">
+        <input id="effectValue" type="number" min="1" max="117" value="12">
+      </div>
+      <div class="actions">
+        <button id="playEffect" class="primary">播放 effect</button>
+        <button id="replay">重复</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>定时震动</h2>
+      <div class="row">
+        <label for="strength">强度</label>
+        <input id="strength" type="range" min="1" max="127" value="80">
+        <input id="strengthValue" type="number" min="1" max="127" value="80">
+      </div>
+      <div class="row">
+        <label for="duration">时间 ms</label>
+        <input id="duration" type="range" min="10" max="2000" step="10" value="200">
+        <input id="durationValue" type="number" min="1" max="5000" value="200">
+      </div>
+      <div class="actions">
+        <button id="timedVibrate" class="primary">震动一次</button>
+        <button id="stop1" class="danger">停止</button>
+      </div>
+    </section>
+
+    <section class="wide">
+      <h2>实时强度</h2>
+      <div class="row">
+        <label for="liveStrength">实时强度</label>
+        <input id="liveStrength" type="range" min="0" max="127" value="0">
+        <input id="liveStrengthValue" type="number" min="0" max="127" value="0">
+      </div>
+      <div class="actions">
+        <button id="enableLive" class="primary">开启实时发送</button>
+        <button id="stopLive" class="danger">停止</button>
+        <button id="record">开始录制</button>
+        <button id="playRecording">回放录制</button>
+        <button id="clearRecording">清空录制</button>
+      </div>
+      <div class="timeline" id="timeline"></div>
+    </section>
+
+    <section class="wide">
+      <h2>串口日志</h2>
+      <p class="status" id="status">未连接。需要 Chrome 或 Edge，并刷入 motor-test 固件。</p>
+      <div class="log" id="log"></div>
+    </section>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const logEl = $("log");
+    const statusEl = $("status");
+    let port = null;
+    let writer = null;
+    let reader = null;
+    let readLoopActive = false;
+    let liveEnabled = false;
+    let liveTimer = 0;
+    let recording = false;
+    let recordingStartedAt = 0;
+    let recordingSamples = [];
+
+    function log(message) {
+      const at = new Date().toLocaleTimeString();
+      logEl.textContent += `[${at}] ${message}\n`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function setStatus(message) {
+      statusEl.textContent = message;
+    }
+
+    function clamp(value, min, max) {
+      const n = Number.parseInt(value, 10);
+      if (Number.isNaN(n)) return min;
+      return Math.max(min, Math.min(max, n));
+    }
+
+    function bindPair(rangeId, numberId, min, max) {
+      const range = $(rangeId);
+      const number = $(numberId);
+      const sync = (source, target) => {
+        const value = clamp(source.value, min, max);
+        source.value = value;
+        target.value = value;
+        return value;
+      };
+      range.addEventListener("input", () => sync(range, number));
+      number.addEventListener("input", () => sync(number, range));
+    }
+
+    bindPair("effect", "effectValue", 1, 117);
+    bindPair("strength", "strengthValue", 1, 127);
+    bindPair("duration", "durationValue", 1, 5000);
+    bindPair("liveStrength", "liveStrengthValue", 0, 127);
+
+    async function send(command) {
+      if (!writer) {
+        log("未连接串口");
+        return;
+      }
+      await writer.write(new TextEncoder().encode(`${command}\n`));
+      log(`>> ${command}`);
+    }
+
+    async function connect() {
+      if (!("serial" in navigator)) {
+        setStatus("当前浏览器不支持 Web Serial。请用 Chrome 或 Edge。");
+        return;
+      }
+
+      port = await navigator.serial.requestPort();
+      await port.open({ baudRate: 115200 });
+      writer = port.writable.getWriter();
+      reader = port.readable.getReader();
+      readLoopActive = true;
+      $("connect").disabled = true;
+      $("disconnect").disabled = false;
+      setStatus("已连接。");
+      log("串口已连接");
+      readLoop();
+    }
+
+    async function disconnect() {
+      stopLive();
+      readLoopActive = false;
+      if (reader) {
+        await reader.cancel().catch(() => {});
+        reader.releaseLock();
+        reader = null;
+      }
+      if (writer) {
+        writer.releaseLock();
+        writer = null;
+      }
+      if (port) {
+        await port.close().catch(() => {});
+        port = null;
+      }
+      $("connect").disabled = false;
+      $("disconnect").disabled = true;
+      setStatus("已断开。");
+    }
+
+    async function readLoop() {
+      const decoder = new TextDecoder();
+      while (readLoopActive && reader) {
+        try {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (value) log(decoder.decode(value).trimEnd());
+        } catch (error) {
+          if (readLoopActive) log(`读取失败: ${error.message}`);
+          break;
+        }
+      }
+    }
+
+    function liveStrength() {
+      return clamp($("liveStrength").value, 0, 127);
+    }
+
+    async function sendLiveStrength() {
+      const strength = liveStrength();
+      await send(`s ${strength}`);
+      if (recording) {
+        recordingSamples.push({ t: performance.now() - recordingStartedAt, strength });
+        renderTimeline();
+      }
+    }
+
+    function startLive() {
+      if (liveEnabled) return;
+      liveEnabled = true;
+      $("enableLive").textContent = "实时发送中";
+      sendLiveStrength();
+      liveTimer = window.setInterval(sendLiveStrength, 80);
+    }
+
+    async function stopLive() {
+      liveEnabled = false;
+      $("enableLive").textContent = "开启实时发送";
+      if (liveTimer) {
+        window.clearInterval(liveTimer);
+        liveTimer = 0;
+      }
+      await send("x");
+    }
+
+    function renderTimeline() {
+      const timeline = $("timeline");
+      timeline.textContent = "";
+      const maxBars = 180;
+      const step = Math.max(1, Math.ceil(recordingSamples.length / maxBars));
+      for (let i = 0; i < recordingSamples.length; i += step) {
+        const bar = document.createElement("div");
+        bar.className = "bar";
+        bar.style.height = `${4 + recordingSamples[i].strength * 0.35}px`;
+        timeline.appendChild(bar);
+      }
+    }
+
+    function toggleRecording() {
+      recording = !recording;
+      $("record").textContent = recording ? "停止录制" : "开始录制";
+      if (recording) {
+        recordingSamples = [];
+        recordingStartedAt = performance.now();
+        renderTimeline();
+      }
+    }
+
+    async function playRecording() {
+      if (recordingSamples.length === 0) {
+        log("没有录制内容");
+        return;
+      }
+      await send("x");
+      const startedAt = performance.now();
+      for (const sample of recordingSamples) {
+        const waitMs = sample.t - (performance.now() - startedAt);
+        if (waitMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, waitMs));
+        }
+        await send(`s ${sample.strength}`);
+      }
+      await send("x");
+    }
+
+    $("connect").addEventListener("click", () => connect().catch((error) => log(`连接失败: ${error.message}`)));
+    $("disconnect").addEventListener("click", () => disconnect());
+    $("playEffect").addEventListener("click", () => send(`e ${clamp($("effect").value, 1, 117)}`));
+    $("replay").addEventListener("click", () => send("r"));
+    $("timedVibrate").addEventListener("click", () => {
+      send(`v ${clamp($("strength").value, 1, 127)} ${clamp($("duration").value, 1, 5000)}`);
+    });
+    $("stop1").addEventListener("click", () => send("x"));
+    $("enableLive").addEventListener("click", startLive);
+    $("stopLive").addEventListener("click", stopLive);
+    $("record").addEventListener("click", toggleRecording);
+    $("playRecording").addEventListener("click", () => playRecording());
+    $("clearRecording").addEventListener("click", () => {
+      recordingSamples = [];
+      renderTimeline();
+    });
+    $("liveStrength").addEventListener("input", () => {
+      if (!liveEnabled) return;
+      sendLiveStrength();
+    });
+    $("liveStrengthValue").addEventListener("input", () => {
+      if (!liveEnabled) return;
+      sendLiveStrength();
+    });
+  </script>
+</body>
+</html>
