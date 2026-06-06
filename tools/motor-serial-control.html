@@ -212,6 +212,29 @@
     </section>
 
     <section class="wide">
+      <h2>马达发声</h2>
+      <div class="row">
+        <label for="toneFrequency">频率 Hz</label>
+        <input id="toneFrequency" type="range" min="1" max="500" value="120">
+        <input id="toneFrequencyValue" type="number" min="1" max="500" value="120">
+      </div>
+      <div class="row">
+        <label for="toneStrength">强度</label>
+        <input id="toneStrength" type="range" min="1" max="127" value="90">
+        <input id="toneStrengthValue" type="number" min="1" max="127" value="90">
+      </div>
+      <div class="row">
+        <label for="toneDuty">占空比 %</label>
+        <input id="toneDuty" type="range" min="1" max="99" value="50">
+        <input id="toneDutyValue" type="number" min="1" max="99" value="50">
+      </div>
+      <div class="actions">
+        <button id="startTone" class="primary">开始发声</button>
+        <button id="stopTone" class="danger">停止发声</button>
+      </div>
+    </section>
+
+    <section class="wide">
       <h2>串口日志</h2>
       <p class="status" id="status">未连接。需要 Chrome 或 Edge，并刷入 motor-test 固件。</p>
       <div class="log" id="log"></div>
@@ -228,6 +251,8 @@
     let readLoopActive = false;
     let liveEnabled = false;
     let liveTimer = 0;
+    let toneEnabled = false;
+    let toneTimer = 0;
     let recording = false;
     let recordingStartedAt = 0;
     let recordingSamples = [];
@@ -265,6 +290,9 @@
     bindPair("strength", "strengthValue", 1, 127);
     bindPair("duration", "durationValue", 1, 5000);
     bindPair("liveStrength", "liveStrengthValue", 0, 127);
+    bindPair("toneFrequency", "toneFrequencyValue", 1, 500);
+    bindPair("toneStrength", "toneStrengthValue", 1, 127);
+    bindPair("toneDuty", "toneDutyValue", 1, 99);
 
     async function send(command) {
       if (!writer) {
@@ -295,6 +323,7 @@
 
     async function disconnect() {
       stopLive();
+      stopTone();
       readLoopActive = false;
       if (reader) {
         await reader.cancel().catch(() => {});
@@ -359,6 +388,31 @@
       await send("x");
     }
 
+    async function sendTone() {
+      const frequency = clamp($("toneFrequency").value, 1, 500);
+      const strength = clamp($("toneStrength").value, 1, 127);
+      const duty = clamp($("toneDuty").value, 1, 99);
+      await send(`m ${frequency} ${strength} ${duty}`);
+    }
+
+    function startTone() {
+      if (toneEnabled) return;
+      toneEnabled = true;
+      $("startTone").textContent = "发声中";
+      sendTone();
+      toneTimer = window.setInterval(sendTone, 200);
+    }
+
+    async function stopTone() {
+      toneEnabled = false;
+      $("startTone").textContent = "开始发声";
+      if (toneTimer) {
+        window.clearInterval(toneTimer);
+        toneTimer = 0;
+      }
+      await send("q");
+    }
+
     function renderTimeline() {
       const timeline = $("timeline");
       timeline.textContent = "";
@@ -409,6 +463,8 @@
     $("stop1").addEventListener("click", () => send("x"));
     $("enableLive").addEventListener("click", startLive);
     $("stopLive").addEventListener("click", stopLive);
+    $("startTone").addEventListener("click", startTone);
+    $("stopTone").addEventListener("click", stopTone);
     $("record").addEventListener("click", toggleRecording);
     $("playRecording").addEventListener("click", () => playRecording());
     $("clearRecording").addEventListener("click", () => {
@@ -423,6 +479,12 @@
       if (!liveEnabled) return;
       sendLiveStrength();
     });
+    for (const id of ["toneFrequency", "toneFrequencyValue", "toneStrength", "toneStrengthValue", "toneDuty", "toneDutyValue"]) {
+      $(id).addEventListener("input", () => {
+        if (!toneEnabled) return;
+        sendTone();
+      });
+    }
   </script>
 </body>
 </html>
