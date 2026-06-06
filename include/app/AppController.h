@@ -7,6 +7,7 @@
 #include "config/DeviceConfig.h"
 #include "drivers/DisplayDriver.h"
 #include "drivers/ImuDriver.h"
+#include "drivers/MotorDriver.h"
 #include "drivers/TouchSensor.h"
 #include "events/TouchEvent.h"
 #include "physics/CubePhysics.h"
@@ -88,6 +89,7 @@ private:
   ScreenRenderer screen_;
   TouchSensor touch_;
   ImuDriver imu_;
+  MotorDriver motor_;
   PetState pet_;
   CubePhysics cubePhysics_;
   RadialMenuController radialMenu_;

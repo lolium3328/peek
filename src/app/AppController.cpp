@@ -35,6 +35,7 @@ void AppController::begin() {
 
   touch_.begin(config_);
   const bool imuReady = imu_.begin();
+  motor_.begin();
   provisioning_.begin(config_, configStore_);
   if (!provisioning_.isActive()) {
     network_.begin(config_);
@@ -423,21 +424,25 @@ void AppController::handleCompletedClick() {
   const uint32_t now = millis();
   if (mode_ == AppMode::ImuLocked) {
     exitImuLocked(now);
+    motor_.play(MotorDriver::Effect::SoftClick);
     return;
   }
   if (mode_ == AppMode::StatusView) {
     mode_ = AppMode::Normal;
     resetShortPressSequence();
+    motor_.play(MotorDriver::Effect::SoftClick);
     renderHomeText(currentHomeHint());
     return;
   }
   if (updateShortPressSequence(now)) return;
   centerCube();
+  motor_.play(MotorDriver::Effect::Tick);
   renderHomeText("centered");
 }
 
 void AppController::handleLongPress() {
   if (mode_ == AppMode::ImuLocked) return;
+  motor_.play(MotorDriver::Effect::StrongClick);
   enterRadialMenu(millis());
 }
 
