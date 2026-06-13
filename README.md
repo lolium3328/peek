@@ -4,15 +4,17 @@ Peek is a firmware-first monorepo for a round-screen ESP32-S3 pet device.
 
 ## Layout
 
-- `platformio.ini`, `src/`, `include/`: embedded firmware.
-- `include/assets`: firmware assets such as generated fonts.
+- `firmware/platformio.ini`, `firmware/src/`, `firmware/include/`: embedded firmware.
+- `firmware/include/assets`: firmware assets such as generated fonts.
 - `apps/web`: Bun backend and TypeScript configuration UI.
 - `docs/hardware`: hardware datasheets and reference material.
 
 ## Firmware
 
 ```bash
+cd firmware
 uvx --with pip --from platformio platformio run
+cd ..
 scripts/upload-firmware.sh
 ```
 
@@ -41,6 +43,25 @@ bun run preview:png -- --mode all
 The generated images are rendered by a host-compiled `ScreenRenderer.cpp` with
 a PNG-backed `DisplayDriver`. They are a development aid only; they do not edit
 or save device layouts.
+
+## Simulator
+
+The standalone simulator lives in `simulator/`. It is a development tool that
+renders firmware screen models with the real firmware `ScreenRenderer.cpp`.
+
+```bash
+cd simulator/web
+bun install
+bun run build
+bun run start
+```
+
+For a direct native render:
+
+```bash
+cd simulator/native
+bun run render -- --input fixtures/home.json --out ../../.peek-preview/simulator-home.png
+```
 
 The server is the primary control plane. Browsers talk to the Bun service, and
 the ESP32 talks back to the service from STA mode through `/api/device/sync`.

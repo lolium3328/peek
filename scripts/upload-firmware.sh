@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "${script_dir}/.." && pwd)"
+firmware_dir="${repo_root}/firmware"
+
 find_upload_port() {
   local port
   local candidates=(
@@ -41,4 +45,4 @@ fi
 
 echo "Uploading firmware to ${upload_port}"
 
-uvx --with pip --from platformio platformio run -t upload --upload-port "${upload_port}"
+uvx --with pip --from platformio platformio run -d "${firmware_dir}" -t upload --upload-port "${upload_port}"

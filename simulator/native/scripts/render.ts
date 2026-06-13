@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const nativeRoot = normalize(join(scriptDir, ".."));
 const repoRoot = normalize(join(nativeRoot, "..", ".."));
+const firmwareRoot = join(repoRoot, "firmware");
 const buildDir = join(repoRoot, ".peek-preview", "simulator-build");
 const binaryPath = join(buildDir, "peek-simulator-render");
 
@@ -22,13 +23,13 @@ function buildRunner() {
   const sources = [
     join(nativeRoot, "src", "main.cpp"),
     join(nativeRoot, "src", "HostDisplayDriver.cpp"),
-    join(repoRoot, "src", "ui", "ScreenRenderer.cpp")
+    join(firmwareRoot, "src", "ui", "ScreenRenderer.cpp")
   ];
   const args = [
     "-std=c++17",
     "-DPEEK_HOST_PREVIEW",
     "-I", join(nativeRoot, "include"),
-    "-I", join(repoRoot, "include"),
+    "-I", join(firmwareRoot, "include"),
     ...sources,
     "-lz",
     "-o", binaryPath

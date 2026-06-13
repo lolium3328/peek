@@ -9,6 +9,7 @@ type PreviewScreenMode = "home" | "homeFrame" | "boot" | "status" | "menu" | "pe
 const modes = ["home", "homeFrame", "boot", "status", "menu", "petThrow"] as const;
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = normalize(join(scriptDir, "..", "..", ".."));
+const firmwareRoot = join(repoRoot, "firmware");
 const buildDir = join(repoRoot, ".peek-preview", "build");
 const binaryPath = join(buildDir, "peek-screen-preview");
 
@@ -99,13 +100,13 @@ function buildPreviewRunner() {
   const sources = [
     join(repoRoot, "tools", "screen-preview", "src", "main.cpp"),
     join(repoRoot, "tools", "screen-preview", "src", "HostDisplayDriver.cpp"),
-    join(repoRoot, "src", "ui", "ScreenRenderer.cpp")
+    join(firmwareRoot, "src", "ui", "ScreenRenderer.cpp")
   ];
   const args = [
     "-std=c++17",
     "-DPEEK_HOST_PREVIEW",
     "-I", join(repoRoot, "tools", "screen-preview", "include"),
-    "-I", join(repoRoot, "include"),
+    "-I", join(firmwareRoot, "include"),
     ...sources,
     "-lz",
     "-o", binaryPath

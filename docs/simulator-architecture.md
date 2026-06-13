@@ -187,6 +187,7 @@ peek/
         simulator.ts
         styles.css
         transport.ts
+        vite-env.d.ts
 
   docs/
     plan.md
@@ -198,7 +199,7 @@ peek/
     upload-firmware.sh
 ```
 
-当前仓库还没有迁移到该结构。第一阶段可以先新增 `simulator/`，继续让固件留在根目录，等仿真器稳定后再搬 `platformio.ini`、`src/`、`include/` 和 `partitions.csv` 到 `firmware/`。
+当前仓库已迁移到该结构的核心形态：固件位于 `firmware/`，正式 Web 位于 `apps/web/`，仿真器位于 `simulator/`。`tools/screen-preview` 暂时保留为正式 Web 的固件屏幕 PNG 预览兼容入口。
 
 ## 固件内部边界
 
@@ -286,7 +287,7 @@ host adapter 放在 `simulator/native/include` 和 `simulator/native/src`，用�
 
 ## 第一阶段落地结构
 
-为了避免一次性大搬家，第一阶段只做新增和轻量搬迁：
+第一阶段已新增独立仿真目录：
 
 ```text
 peek/
@@ -327,11 +328,11 @@ peek/
         styles.css
 ```
 
-现有 `tools/screen-preview` 可以先作为实现来源迁移到 `simulator/native`。迁移完成前，`apps/web/scripts/render-screen-preview.ts` 仍可继续存在，避免影响当前固件 UI 预览命令。
+现有 `tools/screen-preview` 继续作为 `apps/web/scripts/render-screen-preview.ts` 的兼容入口，避免影响当前固件 UI 预览命令。新的交互仿真入口使用 `simulator/native` 和 `simulator/web`。
 
 ## 第二阶段目标结构
 
-第二阶段再移动固件目录：
+第二阶段已移动固件目录：
 
 ```text
 platformio.ini      -> firmware/platformio.ini
@@ -340,7 +341,7 @@ include/            -> firmware/include/
 src/                -> firmware/src/
 ```
 
-同时更新：
+已同步更新：
 
 - `README.md`
 - `scripts/upload-firmware.sh`
