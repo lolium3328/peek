@@ -1,0 +1,21 @@
+{
+  "screenMode": "home",
+  "petIndex": 1,
+  "primaryText": "Pet 1",
+  "hintText": "hold + shake",
+  "localLabel": "A",
+  "peerLabel": "B",
+  "localWeather": "--",
+  "peerWeather": "--",
+  "wifiConnected": true,
+  "backendConnected": true,
+  "lowBattery": false,
+  "imuReady": true,
+  "cubeVisible": true,
+  "rollDeg": 12,
+  "pitchDeg": -8,
+  "yawDeg": 0,
+  "cubeOffsetX": 4,
+  "cubeOffsetY": -3,
+  "cubeScale": 32
+}

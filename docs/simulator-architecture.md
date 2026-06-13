@@ -1,5 +1,7 @@
 # Peek 仿真器架构设计
 
+实施分支：`simulator`
+
 ## 目标
 
 Peek 需要一个非侵入式仿真版本，用于在没有真实 ESP32-S3 硬件时验证屏幕绘制、交互状态机、资源同步和 Web 控制流程。
@@ -153,10 +155,14 @@ peek/
       simulator-state.ts
     native/
       README.md
+      package.json
+      bun.lock
       include/
         Arduino.h
         HostPreview.h
         LittleFS.h
+      scripts/
+        render.ts
       src/
         HostDisplayDriver.cpp
         main.cpp
@@ -291,10 +297,14 @@ peek/
       render-request.ts
       render-response.ts
     native/
+      package.json
+      bun.lock
       include/
         Arduino.h
         HostPreview.h
         LittleFS.h
+      scripts/
+        render.ts
       src/
         HostDisplayDriver.cpp
         main.cpp
@@ -304,6 +314,9 @@ peek/
         menu.json
     web/
       package.json
+      bun.lock
+      tsconfig.json
+      vite.config.ts
       index.html
       server/
         index.ts

@@ -1,0 +1,15 @@
+{
+  "screenMode": "radialMenu",
+  "petIndex": 1,
+  "primaryText": "Pet 1",
+  "hintText": "menu",
+  "wifiConnected": true,
+  "backendConnected": false,
+  "imuReady": true,
+  "cubeVisible": true,
+  "rollDeg": 8,
+  "pitchDeg": -10,
+  "selectedItem": "info",
+  "cursorX": 32,
+  "cursorY": -32
+}

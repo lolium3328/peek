@@ -1,0 +1,11 @@
+{
+  "screenMode": "status",
+  "touchPressed": false,
+  "wifiRssi": -52,
+  "backendConnected": true,
+  "imuReady": true,
+  "imuAddress": 104,
+  "imuAccelZ": 16384,
+  "rollDeg": 4,
+  "pitchDeg": -6
+}
